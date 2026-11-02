@@ -16,7 +16,7 @@ An interactive 3D walkthrough of **Knowledgator’s GLiFormer Large v1**: 575.6 
 
 Write a sentence and a schema, or open a document page. The real model runs, and the app captures the actual hidden states, attention probabilities, word features and task scores. Select any stage to read what it does, inspect your sentence’s values, or follow the implementation at its pinned source revision.
 
-This is a separate project inspired by [Inside GLiNER2.5](https://github.com/polodealvarado/gliner2-visualizer). Its backend and explanations follow GLiFormer’s architecture.
+This project reuses the visual language and diagram conventions of [Inside GLiNER2.5](https://github.com/polodealvarado/gliner2-visualizer): its typography, top composer, stage descriptions, aligned sentence plates, colored spans, camera framing, fading and information-flow animation. Its backend, stage builders and explanations follow GLiFormer’s architecture.
 
 ## Run locally
 
@@ -52,7 +52,10 @@ The live server defaults to localhost, CPU inference and four PyTorch threads. U
 
 The tower lets you step through every layer, play the stages, orbit and zoom, inspect individual pieces, choose a schema marker, and inspect any of the 16 attention heads. The meaning map projects hidden states into 3D and aligns successive layers so movement is easier to follow.
 
+Each stage has its own diagram. Entity decisions label complete source spans; BIO shows start/end/inside scores at words; relations draw directed candidate links; records use fixed slots and span-membership connections. Previous stages remain faintly visible for context, following the original visualizer. The meaning map includes trails and the full-space nearest-word link.
+
 <table>
+<tr><td colspan="2"><img src="docs/entity-decision.png" alt="Entity decision: complete colored spans, confidence labels and faded previous stages, matching the original GLiNER2 walkthrough"></td></tr>
 <tr><td width="50%"><img src="docs/attention.png" alt="Layer 12 and real query-to-word attention values"></td><td width="50%"><img src="docs/document.png" alt="Invoice page with clickable word boxes and their exact normalized coordinates"></td></tr>
 <tr><td align="center"><sub>Attention inside the shared encoder</sub></td><td align="center"><sub>Document words and their 2D geometry</sub></td></tr>
 <tr><td><img src="docs/map.png" alt="PCA projection of contextualized token representations"></td><td><img src="docs/structure.png" alt="Structured source-grounded records and model output"></td></tr>
@@ -169,6 +172,7 @@ uv run server.py --offline --check
 uv run python scripts/browser_qa.py       # requires the live server and Chrome
 uv run python scripts/document_qa.py      # PDF, page selection, image OCR and real-model alignment
 uv run python scripts/verify_traces.py    # numeric/source invariants across all 17 recorded traces
+uv run python scripts/reference_qa.py     # every visual stage and the original layout conventions
 ```
 
 The browser check covers every task, all explanation tabs, real attention-head selection, the meaning map, document-box selection, geometry enabled/disabled, a custom sentence, mobile overflow and JavaScript errors. The model check performs real inference for all task tabs. Baking also exercises every preset, including the nested company schema.

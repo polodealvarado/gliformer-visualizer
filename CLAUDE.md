@@ -2,6 +2,9 @@
 
 Treat this as a personal project. Use the repository owner's personal Git identity. Keep company names and private data out of commits.
 
+Preserve the GLiNER2 visualizer's layout, typography, sentence alignment, span colors, camera framing and faded preceding plates.
+Adapt diagrams to GLiFormer stages. Keep frontend diagram builders in `walkthrough.js`.
+
 Run `uv sync` and `uv run server.py`. Open port 8766. The GLiNER2 visualizer uses port 8765.
 
 Preserve the pinned model and framework revisions. Update `uv.lock`, provenance, lessons and architecture documentation together when changing either revision.

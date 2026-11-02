@@ -230,3 +230,17 @@ The server observes normal framework inference. It requests additional encoder o
 The presentation compresses data in explicit ways: 32-dimensional display strips, rounded numbers, mean token attention and a three-dimensional PCA projection. It retains all 100 slot scores, full sentence embeddings and captured candidate scores in downloadable traces. It does not export all 1,024 hidden dimensions for every layer.
 
 Timings distinguish model inference from total trace preparation. The app’s measurements describe short examples on the current host, not a benchmark or throughput guarantee.
+
+
+## Visual conventions shared with Inside GLiNER2.5
+
+The interface reuses the original visualizer's top composer, Inter/Playfair Display/IBM Plex Mono typography, stage descriptions and three explanation tabs.
+The original local `index.html` was verified byte-for-byte against the deployed Hugging Face Space on 2026-11-02 (SHA-256 `b4f24cba07551c558aadaa52050786b1b90c55a25074cc9de3e60a73a6c68920`).
+
+`walkthrough.js` adapts the original plate geometry, canvas text, row layout, source-span labels, camera fitting, stage fading and transition particles.
+Words retain their relative horizontal positions between word-level stages. Complete entities share one type color and one score label over the full mention.
+Previous plates remain faintly visible; later plates fade away. Token plates separate prompt groups from the source sentence.
+
+GLiFormer-specific builders show word start/end/inside scores, the word LSTM, parent-anchor conditioning, directed entity pairs, fixed record slots, membership, hierarchy and document geometry.
+They do not introduce GLiNER2.5 gap vectors, shared boundary pools or span-anchored record instances.
+Sentence embeddings and the meaning map retain their separate numerical contracts described above.

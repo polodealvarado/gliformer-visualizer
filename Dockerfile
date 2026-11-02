@@ -14,7 +14,7 @@ RUN uv export --frozen --no-dev --no-hashes --no-emit-project --prune torch -o r
     && uv pip install -r requirements.txt
 COPY --chown=user server.py documents.py examples.json ./
 RUN python server.py --check
-COPY --chown=user index.html style.css app.js lessons.js ./
+COPY --chown=user index.html style.css app.js lessons.js walkthrough.js ./
 COPY --chown=user vendor ./vendor
 EXPOSE 7860
 CMD ["python", "server.py", "--host", "0.0.0.0", "--port", "7860"]

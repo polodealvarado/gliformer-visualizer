@@ -41,7 +41,7 @@ def main():
             page.screenshot(path=str(screenshots / f"{task}.png"))
             if task == "entities":
                 assert "Marie Curie" in page.locator("#panel-content").inner_text()
-                page.click("#rail .layer-grid button:nth-child(12)")
+                page.click("#rail .layer-grid [data-step]:nth-child(12)")
                 page.click("#panel-tabs [data-tab='data']")
                 page.select_option("#query-select", label="entity · person")
                 page.select_option("#head-select", "3")
@@ -57,7 +57,7 @@ def main():
                 page.locator("#doc-boxes rect").nth(10).click(force=True)
                 assert "Box" in page.locator("#panel-content").inner_text()
                 page.screenshot(path=str(screenshots / "document-boxes.png"))
-                page.click("#rail .layer-grid button:nth-child(12)")
+                page.click("#rail .layer-grid [data-step]:nth-child(12)")
                 page.click("#panel-tabs [data-tab='data']")
                 assert "attention over page" in page.locator("#scene-subtitle").inner_text()
                 assert page.locator("#doc-boxes rect[style]").count() > 0

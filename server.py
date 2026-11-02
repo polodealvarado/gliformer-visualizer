@@ -494,9 +494,11 @@ class Handler(BaseHTTPRequestHandler):
         files = {"/": ("index.html", "text/html"), "/index.html": ("index.html", "text/html"),
                  "/app.js": ("app.js", "text/javascript"), "/style.css": ("style.css", "text/css"),
                  "/lessons.js": ("lessons.js", "text/javascript"),
+                 "/walkthrough.js": ("walkthrough.js", "text/javascript"),
                  "/examples.json": ("examples.json", "application/json"),
                  "/vendor/three.module.js": ("vendor/three.module.js", "text/javascript"),
                  "/vendor/OrbitControls.js": ("vendor/OrbitControls.js", "text/javascript")}
+        files["/vendor/RoundedBoxGeometry.js"] = ("vendor/RoundedBoxGeometry.js", "text/javascript")
         if path in files:
             file, kind = files[path]
             return self.send_bytes(200, (HERE / file).read_bytes(), kind + "; charset=utf-8")
