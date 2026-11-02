@@ -1,0 +1,30 @@
+[project]
+name = "gliformer-visualizer"
+version = "0.1.0"
+description = "An interactive, instrumented walkthrough of GLiFormer Large v1."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "gliformer @ git+https://github.com/Knowledgator/GLiFormer.git@73d1dad5ebf1f34a00339f023b1fd77a6d1f386a",
+    "gliner==0.2.29",
+    "torch==2.13.0",
+    "transformers>=5.9,<5.17",
+    "numpy>=2,<3",
+    "scipy>=1.14,<2",
+    "sentencepiece>=0.2",
+    "protobuf>=4",
+    "pymupdf>=1.25,<2",
+]
+
+[dependency-groups]
+dev = ["playwright>=1.50", "pytest>=8,<10", "ruff>=0.12"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]

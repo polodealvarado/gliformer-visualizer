@@ -1,0 +1,391 @@
+{
+  "info": {
+    "name": "knowledgator/gliformer-large-v1",
+    "revision": "d0a4e53d09cebe6bc963dd9be319d4279084bb2d",
+    "source_revision": "73d1dad5ebf1f34a00339f023b1fd77a6d1f386a",
+    "layers": 24,
+    "hidden": 1024,
+    "heads": 16,
+    "vocab": 128008,
+    "params": 575637510,
+    "encoder_params": 437004288,
+    "rnn_layers": 1,
+    "device": "cpu",
+    "tasks": [
+      "ner",
+      "classification",
+      "joint_relex",
+      "structuring",
+      "embedding"
+    ],
+    "layout": true,
+    "pixel_encoder": false,
+    "spatial_embedding": "absolute",
+    "relative_layout_attention": false,
+    "record_slots": 100,
+    "head_params": {
+      "ner": 18895875,
+      "classification": 2098176,
+      "joint_relex": 41963520,
+      "structuring": 67276803,
+      "embedding": 2099200
+    },
+    "versions": {
+      "gliformer": "0.1.4",
+      "gliner": "0.2.29",
+      "torch": "2.13.0",
+      "transformers": "5.16.1"
+    },
+    "sources": {
+      "encoder": "https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/backbones/deberta_2d.py",
+      "rnn": "https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/model.py",
+      "ner": "https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/ner/model.py",
+      "classification": "https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/classification/model.py",
+      "relations": "https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/joint_relex/model.py",
+      "structure": "https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/structuring/model.py",
+      "decoder": "https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/span_decoder.py",
+      "embedding": "https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/gliformer.py"
+    }
+  },
+  "examples": {
+    "entities": [
+      {
+        "name": "People & places",
+        "text": "Marie Curie worked at the University of Paris in France.",
+        "entities": [
+          "person",
+          "organization",
+          "location"
+        ]
+      },
+      {
+        "name": "A medical note",
+        "text": "Dr. Alice Morgan prescribed ibuprofen for John's headache on Monday.",
+        "entities": [
+          "person",
+          "medication",
+          "symptom",
+          "date"
+        ]
+      },
+      {
+        "name": "Same word, different meaning",
+        "text": "Apple opened a new office in London. Alice ate an apple for lunch.",
+        "entities": [
+          "organization",
+          "person",
+          "city",
+          "food"
+        ]
+      }
+    ],
+    "classification": [
+      {
+        "name": "News topic",
+        "text": "The central bank raised interest rates to fight inflation.",
+        "classes": {
+          "topic": [
+            "economy",
+            "sports",
+            "technology",
+            "politics"
+          ]
+        }
+      },
+      {
+        "name": "Support ticket",
+        "text": "I was charged twice for my subscription and nobody answers my emails.",
+        "classes": {
+          "intent": [
+            "billing",
+            "technical problem",
+            "cancellation"
+          ],
+          "tone": [
+            "angry",
+            "neutral",
+            "happy"
+          ]
+        }
+      },
+      {
+        "name": "A review",
+        "text": "This camera takes beautiful photos and is a pleasure to use.",
+        "classes": {
+          "sentiment": [
+            "positive",
+            "negative",
+            "neutral"
+          ]
+        }
+      }
+    ],
+    "relations": [
+      {
+        "name": "Who works where?",
+        "text": "Marie Curie worked at the University of Paris in France.",
+        "entities": [
+          "person",
+          "organization",
+          "location"
+        ],
+        "relations": [
+          "works_at",
+          "located_in"
+        ]
+      },
+      {
+        "name": "Two people",
+        "text": "Alice works at Microsoft. Bob works at Google.",
+        "entities": [
+          "person",
+          "organization"
+        ],
+        "relations": [
+          "works_for"
+        ]
+      },
+      {
+        "name": "A family",
+        "text": "Barack Obama is married to Michelle Obama. They live in Washington.",
+        "entities": [
+          "person",
+          "location"
+        ],
+        "relations": [
+          "spouse_of",
+          "lives_in"
+        ]
+      }
+    ],
+    "structure": [
+      {
+        "name": "Separate purchases",
+        "text": "Alice bought apples and Bob bought oranges.",
+        "structures": {
+          "purchase": [
+            "buyer",
+            "item"
+          ]
+        }
+      },
+      {
+        "name": "Company hierarchy",
+        "text": "At Acme, Engineering includes Alice, a software engineer, and Bob, a designer. Sales includes Carol, an account manager.",
+        "structures": {
+          "company": {
+            "name": "str",
+            "departments": [
+              {
+                "name": "str",
+                "employees": [
+                  {
+                    "name": "str",
+                    "role": "str"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "An employment record",
+        "text": "Alice Morgan joined Microsoft as a researcher in London.",
+        "structures": {
+          "employee": [
+            "name",
+            "company",
+            "role",
+            "city"
+          ]
+        }
+      }
+    ],
+    "embedding": [
+      {
+        "name": "Meaning, not exact words",
+        "text": "A scientist works in a laboratory.",
+        "compare": [
+          "A researcher conducts an experiment.",
+          "A musician performs on stage.",
+          "The train arrives at noon."
+        ]
+      },
+      {
+        "name": "Related sentences",
+        "text": "The customer wants a refund.",
+        "compare": [
+          "Please return my money.",
+          "I would like to cancel my order.",
+          "The weather is sunny today."
+        ]
+      }
+    ],
+    "document": [
+      {
+        "name": "An invoice",
+        "document": "invoice",
+        "entities": [
+          "person",
+          "company",
+          "invoice number",
+          "date",
+          "amount of money"
+        ],
+        "structures": {
+          "invoice": [
+            "invoice number",
+            "customer",
+            "total due",
+            "payment due"
+          ]
+        }
+      }
+    ],
+    "all": [
+      {
+        "name": "One encoder, several heads",
+        "text": "Marie Curie worked at the University of Paris in France.",
+        "entities": [
+          "person",
+          "organization",
+          "location"
+        ],
+        "classes": {
+          "topic": [
+            "science",
+            "sports",
+            "business"
+          ]
+        },
+        "relations": [
+          "works_at",
+          "located_in"
+        ],
+        "structures": {
+          "scientist": [
+            "name",
+            "organization",
+            "country"
+          ]
+        }
+      },
+      {
+        "name": "An employment record",
+        "text": "Alice Morgan joined Microsoft as a researcher in London.",
+        "entities": [
+          "person",
+          "organization",
+          "location",
+          "job title"
+        ],
+        "classes": {
+          "topic": [
+            "business",
+            "science",
+            "sports"
+          ]
+        },
+        "relations": [
+          "works_for"
+        ],
+        "structures": {
+          "employee": [
+            "name",
+            "company",
+            "role",
+            "city"
+          ]
+        }
+      }
+    ]
+  },
+  "traces": [
+    {
+      "task": "entities",
+      "index": 0,
+      "file": "entities-0.json.gz"
+    },
+    {
+      "task": "entities",
+      "index": 1,
+      "file": "entities-1.json.gz"
+    },
+    {
+      "task": "entities",
+      "index": 2,
+      "file": "entities-2.json.gz"
+    },
+    {
+      "task": "classification",
+      "index": 0,
+      "file": "classification-0.json.gz"
+    },
+    {
+      "task": "classification",
+      "index": 1,
+      "file": "classification-1.json.gz"
+    },
+    {
+      "task": "classification",
+      "index": 2,
+      "file": "classification-2.json.gz"
+    },
+    {
+      "task": "relations",
+      "index": 0,
+      "file": "relations-0.json.gz"
+    },
+    {
+      "task": "relations",
+      "index": 1,
+      "file": "relations-1.json.gz"
+    },
+    {
+      "task": "relations",
+      "index": 2,
+      "file": "relations-2.json.gz"
+    },
+    {
+      "task": "structure",
+      "index": 0,
+      "file": "structure-0.json.gz"
+    },
+    {
+      "task": "structure",
+      "index": 1,
+      "file": "structure-1.json.gz"
+    },
+    {
+      "task": "structure",
+      "index": 2,
+      "file": "structure-2.json.gz"
+    },
+    {
+      "task": "embedding",
+      "index": 0,
+      "file": "embedding-0.json.gz"
+    },
+    {
+      "task": "embedding",
+      "index": 1,
+      "file": "embedding-1.json.gz"
+    },
+    {
+      "task": "document",
+      "index": 0,
+      "file": "document-0.json.gz"
+    },
+    {
+      "task": "all",
+      "index": 0,
+      "file": "all-0.json.gz"
+    },
+    {
+      "task": "all",
+      "index": 1,
+      "file": "all-1.json.gz"
+    }
+  ]
+}

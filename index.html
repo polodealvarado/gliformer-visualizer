@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Explore the real internals of GLiFormer: text, document layout, 24 Transformer layers and five information-extraction tasks.">
+  <meta name="theme-color" content="#edf2f6">
+  <title>Inside GLiFormer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%2356519e'/%3E%3Cpath d='m10 18 14-7 14 7-14 7zM10 25l14 7 14-7M10 32l14 7 14-7' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/controls/OrbitControls.js":"./vendor/OrbitControls.js"}}</script>
+</head>
+<body>
+  <header>
+    <button id="brand" class="brand" title="Back to the introduction"><span class="logo">▱</span> Inside <b>GLiFormer</b></button>
+    <span class="tag">A model, from the inside</span>
+    <div class="header-right"><span id="mode" class="badge">Connecting to the model</span><button id="about" class="quiet">About the model ↗</button><a href="https://github.com/polodealvarado/gliformer-visualizer" target="_blank" rel="noopener" class="quiet">GitHub ↗</a></div>
+  </header>
+  <nav id="tasks" aria-label="Extraction tasks"></nav>
+  <main>
+    <aside id="rail" aria-label="Model stages"></aside>
+    <section id="viewport" aria-label="Interactive model visualization">
+      <canvas id="scene" aria-label="3D model tower. Select a stage from the list to inspect it."></canvas>
+      <div id="view-switch" class="segmented"><button data-view="tower" class="on">Model flow</button><button data-view="map">Meaning map</button><button data-view="document" hidden>Document</button></div>
+      <div id="scene-label"><span class="eyebrow">THE SHARED ENCODER</span><h2 id="scene-title">One encoder. Many ways to read.</h2><p id="scene-subtitle">Every number is captured from the real model.</p></div>
+      <div id="doc-view" hidden><div id="doc-paper"><img id="doc-image" alt="Document page"><svg id="doc-boxes" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label="Word bounding boxes"></svg></div></div>
+      <div id="scene-tools"><button id="overview" title="Fit the whole tower">⊞ Overview</button><button id="play">▶ Play stages</button><button id="reset-camera" title="Reset the camera">↻ Camera</button></div>
+      <div id="map-control" hidden><label for="map-layer">Layer <b id="map-value">0</b></label><input id="map-layer" type="range" min="0" max="24" value="0"><button id="map-play">▶</button></div>
+      <div id="scene-hint">Drag to orbit · Scroll to zoom · Click a piece to inspect</div>
+      <div id="tooltip" role="status" hidden></div>
+      <div id="busy" hidden><span class="spinner"></span><strong>Following the model’s forward pass…</strong><span>Capturing hidden states, attention and task scores.</span></div>
+    </section>
+    <section id="inspector" aria-label="Stage explanation">
+      <div class="panel-heading"><span id="stage-number" class="eyebrow">THE WALKTHROUGH</span><h1 id="stage-title">From text to understanding</h1><p id="stage-subtitle"></p></div>
+      <div id="panel-tabs" role="tablist" aria-label="Explanation detail"><button role="tab" data-tab="what" aria-selected="true">What it does</button><button role="tab" data-tab="data" aria-selected="false">Your sentence</button><button role="tab" data-tab="tech" aria-selected="false">Under the hood</button></div>
+      <div id="panel-content" role="tabpanel"></div>
+      <div class="stepper"><button id="prev" aria-label="Previous stage">← Previous</button><span id="step-count"></span><button id="next" aria-label="Next stage">Next →</button></div>
+    </section>
+  </main>
+  <section id="input-area" aria-label="Sentence and extraction schema">
+    <div class="example-line"><span class="eyebrow">TRY A SENTENCE</span><div id="examples"></div><span id="timing"></span></div>
+    <form id="analyze-form">
+      <div class="text-column"><label for="text">Text to explore</label><textarea id="text" rows="3" spellcheck="false" maxlength="3000"></textarea><span id="text-help" class="help">Labels can change at inference time. Start with an example, then make it yours.</span></div>
+      <div class="schema-column">
+        <div class="field" data-field="entities"><label for="entities">Entity types <span>comma separated</span></label><input id="entities" autocomplete="off" spellcheck="false" placeholder="person, organization, location"></div>
+        <div class="field" data-field="classes"><label for="classes">Classification groups <span>group: labels; group: labels</span></label><input id="classes" autocomplete="off" spellcheck="false" placeholder="topic: science, sports, business"></div>
+        <div class="field" data-field="relations"><label for="relations">Joint relation types <span>entity types are required</span></label><input id="relations" autocomplete="off" spellcheck="false" placeholder="works_at, located_in"></div>
+        <div class="field" data-field="structures"><label for="structures">Structure schema <span>editable JSON · nesting is supported</span></label><textarea id="structures" rows="2" spellcheck="false" placeholder='{"employee":["name","company"]}'></textarea></div>
+        <div class="field" data-field="compare"><label for="compare">Compare with <span>one sentence per line</span></label><textarea id="compare" rows="3" spellcheck="false"></textarea></div>
+        <div class="field" data-field="document"><div class="document-actions"><label class="upload-button" for="upload">↑ Open PDF or image<input id="upload" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden></label><label class="check"><input type="checkbox" id="use-layout" checked>Use word positions</label></div><div class="document-actions"><span id="document-name" class="help"></span><label id="page-control" hidden>Page <select id="document-page"></select></label></div></div>
+      </div>
+      <div class="run-column"><label for="threshold">Confidence threshold <output id="threshold-value">0.50</output></label><input id="threshold" type="range" min="0.05" max="0.95" step="0.05" value="0.5"><label class="check" id="multi-label-control"><input type="checkbox" id="multi-label">Allow multiple labels</label><button id="run" class="primary" type="submit">Explore the model <span>↗</span></button><button id="download" class="quiet" type="button" disabled>↓ Download this trace</button></div>
+    </form>
+    <div id="error" role="alert" hidden></div>
+  </section>
+  <footer><span><a href="https://huggingface.co/knowledgator/gliformer-large-v1" target="_blank" rel="noopener">knowledgator/gliformer-large-v1</a> · <span id="model-spec">24 layers · 1,024 dimensions · 575.6M parameters</span></span><span>By <a href="https://huggingface.co/polodealvarado" target="_blank" rel="noopener">@polodealvarado</a> · Built on <a href="https://github.com/Knowledgator/GLiFormer" target="_blank" rel="noopener">GLiFormer</a> by Knowledgator</span></footer>
+  <section id="landing" aria-label="Introduction">
+    <div class="landing-copy"><span class="eyebrow">AN INTERACTIVE MODEL EXPLORER</span><h1>Inside<br><span>GLiFormer.</span></h1><p class="lead">Follow the journey from a sentence<br>to structured understanding.</p><p>Watch a real model read text, use a document’s layout, and turn both into answers. One stage at a time. Every layer, every score.</p><button id="start" class="primary">Let’s look inside <span>↗</span></button><div class="landing-stats"><span><b>24</b> Transformer layers</span><span><b>5</b> text tasks</span><span><b>2D</b> document layout</span></div><div id="landing-tasks"></div><p class="landing-credit">A learning project by @polodealvarado. Independent of Knowledgator.</p></div>
+  </section>
+  <dialog id="about-dialog"><button id="close-about" class="dialog-close" aria-label="Close">×</button><span class="eyebrow">MEET THE MODEL</span><h1>One encoder.<br>Several kinds of answers.</h1><p>GLiFormer is Knowledgator’s framework for generalist information extraction. This walkthrough runs the <b>575.6 million parameter Large v1 checkpoint</b>, a layout-aware DeBERTa model.</p><div id="about-tasks"></div><h2>What does “text + image” mean here?</h2><p>For a document page, a PDF text reader or OCR first finds the words and their boxes. This checkpoint reads <b>the text and the 2D coordinates</b>. You can see those boxes on the page and their spatial embeddings in the tower.</p><p>The page image is the visual reference. This checkpoint has no image-pixel encoder or audio head. Other GLiFormer variants support those modalities.</p><h2>Read the numbers honestly</h2><p>Attention shows where a token gathers information; it is not a proof of why an answer was produced. The meaning map is a 3D PCA projection of 1,024-dimensional vectors. Display strips show the first 32 dimensions. Scores are model outputs, not guarantees of correctness.</p><p>The checkpoint is documented for English. Try other languages as experiments and inspect the results.</p><p><a href="https://github.com/Knowledgator/GLiFormer" target="_blank" rel="noopener">Framework and source ↗</a> · <a href="https://huggingface.co/knowledgator/gliformer-large-v1" target="_blank" rel="noopener">Model card ↗</a></p></dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

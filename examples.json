@@ -1,0 +1,33 @@
+{
+  "entities": [
+    {"name":"People & places","text":"Marie Curie worked at the University of Paris in France.","entities":["person","organization","location"]},
+    {"name":"A medical note","text":"Dr. Alice Morgan prescribed ibuprofen for John's headache on Monday.","entities":["person","medication","symptom","date"]},
+    {"name":"Same word, different meaning","text":"Apple opened a new office in London. Alice ate an apple for lunch.","entities":["organization","person","city","food"]}
+  ],
+  "classification": [
+    {"name":"News topic","text":"The central bank raised interest rates to fight inflation.","classes":{"topic":["economy","sports","technology","politics"]}},
+    {"name":"Support ticket","text":"I was charged twice for my subscription and nobody answers my emails.","classes":{"intent":["billing","technical problem","cancellation"],"tone":["angry","neutral","happy"]}},
+    {"name":"A review","text":"This camera takes beautiful photos and is a pleasure to use.","classes":{"sentiment":["positive","negative","neutral"]}}
+  ],
+  "relations": [
+    {"name":"Who works where?","text":"Marie Curie worked at the University of Paris in France.","entities":["person","organization","location"],"relations":["works_at","located_in"]},
+    {"name":"Two people","text":"Alice works at Microsoft. Bob works at Google.","entities":["person","organization"],"relations":["works_for"]},
+    {"name":"A family","text":"Barack Obama is married to Michelle Obama. They live in Washington.","entities":["person","location"],"relations":["spouse_of","lives_in"]}
+  ],
+  "structure": [
+    {"name":"Separate purchases","text":"Alice bought apples and Bob bought oranges.","structures":{"purchase":["buyer","item"]}},
+    {"name":"Company hierarchy","text":"At Acme, Engineering includes Alice, a software engineer, and Bob, a designer. Sales includes Carol, an account manager.","structures":{"company":{"name":"str","departments":[{"name":"str","employees":[{"name":"str","role":"str"}]}]}}},
+    {"name":"An employment record","text":"Alice Morgan joined Microsoft as a researcher in London.","structures":{"employee":["name","company","role","city"]}}
+  ],
+  "embedding": [
+    {"name":"Meaning, not exact words","text":"A scientist works in a laboratory.","compare":["A researcher conducts an experiment.","A musician performs on stage.","The train arrives at noon."]},
+    {"name":"Related sentences","text":"The customer wants a refund.","compare":["Please return my money.","I would like to cancel my order.","The weather is sunny today."]}
+  ],
+  "document": [
+    {"name":"An invoice","document":"invoice","entities":["person","company","invoice number","date","amount of money"],"structures":{"invoice":["invoice number","customer","total due","payment due"]}}
+  ],
+  "all": [
+    {"name":"One encoder, several heads","text":"Marie Curie worked at the University of Paris in France.","entities":["person","organization","location"],"classes":{"topic":["science","sports","business"]},"relations":["works_at","located_in"],"structures":{"scientist":["name","organization","country"]}},
+    {"name":"An employment record","text":"Alice Morgan joined Microsoft as a researcher in London.","entities":["person","organization","location","job title"],"classes":{"topic":["business","science","sports"]},"relations":["works_for"],"structures":{"employee":["name","company","role","city"]}}
+  ]
+}
