@@ -162,6 +162,11 @@ function queryControl() {
   return `<label class="sub-label" for="query-select">Follow a schema question</label><select class="query-selector" id="query-select">${DATA.queries.map((q,i)=>`<option value="${i}" ${i===S.query?'selected':''}>${esc(q.kind+' · '+q.name)}</option>`).join('')}</select>`;
 }
 function wordControl(){return `<label class="sub-label" for="word-select">Inspect a source word</label><select class="query-selector" id="word-select">${DATA.words.map((w,i)=>`<option value="${i}" ${i===S.word?'selected':''}>${i} · ${esc(w.text)}</option>`).join('')}</select>`;}
+function lstmWordContent(){
+  const word=DATA.words[S.word],before=DATA.words.slice(0,S.word),after=DATA.words.slice(S.word+1);
+  const context=words=>words.length?(words.length>8?'… ':'')+esc(words.slice(-8).map(w=>w.text).join(' ')):'<em>no earlier words in this reading direction</em>';
+  return `${wordControl()}<p>Follow what happens at <b>“${esc(word.text)}”</b>.</p><div class="rnn-context"><div><b>→ Left-to-right pass</b><p>Most recently visited before this word:</p><span>${context(before)}</span></div><div><b>← Right-to-left pass</b><p>Most recently visited before this word:</p><span>${context([...after].reverse())}</span></div></div>${note('These lists show reading order, not the contents of the numerical memory. Long routes are shortened with “…”. The blue and teal drawing is schematic.')}<h3>The real numbers for this word</h3><p>A <b>vector</b> is a list of numbers representing the word. These strips show actual values entering and leaving the LSTM; they are not confidence scores.</p><h3>Before · from the Transformer</h3>${strip(DATA.rnn.before[S.word])}<h3>After · from the LSTM</h3>${strip(DATA.rnn.after[S.word])}<p class="help">The complete output joins 512 numbers from each direction. This saved output strip shows its first 32 dimensions, within the left-to-right half.</p>`;
+}
 function slotControl() {
   const rec=selectedRecord();if(!rec)return '';
   return `<label class="sub-label" for="slot-select">Inspect a record slot · sorted by objectness</label><select class="query-selector" id="slot-select">${rec.slot_order.map(id=>`<option value="${id}" ${id===S.slot?'selected':''}>Slot ${id} · objectness ${fmt(rec.objectness[id])}</option>`).join('')}</select>`;
@@ -205,7 +210,7 @@ function dataContent(key) {
       return `${queryControl()}${followsQuery?`<label class="sub-label" for="head-select">Attention head</label><select class="query-selector" id="head-select"><option value="-1" ${S.head<0?'selected':''}>Average of all ${INFO.heads} heads</option>${Array.from({length:INFO.heads},(_,i)=>`<option value="${i}" ${S.head===i?'selected':''}>Head ${i+1}</option>`).join('')}</select>`:''}<h3>Where “${esc(followsQuery?q.name:DATA.tokens[S.focus].piece)}” looks</h3>${bars(DATA.words.map((word,i)=>({name:word.text,value:attention?.[i]||0})))}${!followsQuery?note('Following the selected piece. Values are the mean across all heads. Select a schema question above to inspect individual heads.'):''}<h3>Attention between all pieces</h3>${smallAttention(L)}<h3>Selected piece after this layer</h3>${strip(L.strip[S.focus])}`;
     }
     case 'words':return `${wordControl()}<p>The selected word starts at subword token <b>${tokenForWord(S.word)}</b>.</p><h3>After the Transformer</h3>${strip(DATA.layers.at(-1).strip[tokenForWord(S.word)])}`;
-    case 'rnn':return `${wordControl()}<h3>Before the word LSTM</h3>${strip(DATA.rnn.before[S.word])}<h3>After the word LSTM</h3>${strip(DATA.rnn.after[S.word])}`;
+    case 'rnn':return lstmWordContent();
     case 'anchors':return `${queryControl()}${Object.entries(DATA.stages.anchors||{}).map(([name,a])=>`<h3>${esc(name)} · fused question vectors</h3><code>${esc(a.shape.join(' × '))}</code>${a.strip.length?strip(a.strip[0]):''}`).join('')}${note('The strips above show the first fused anchor–label vector captured in each head. Shared NER calls can also supply structure-field questions.')}`;
     case 'bio': {
       const bio=selectedBio();if(!bio)return empty('This run has no standalone entity BIO scores.');
@@ -342,6 +347,7 @@ async function uploadDocument(page=0) {
 }
 
 document.addEventListener('click',async event=>{
+  if(event.target.closest('[data-rnn-replay]')){if(S.view!=='tower')setView('tower');engine?.replayLSTM();return;}
   const following=event.target.closest('[data-query]');if(following){followQuery(Number(following.dataset.query));return;}
   if(event.target.closest('[data-open-about]')){$('#about-dialog').showModal();return;}
   const task=event.target.closest('[data-task]');if(task){await chooseTask(task.dataset.task,true);return;}
@@ -358,7 +364,7 @@ document.addEventListener('change',event=>{
   const el=event.target;
   if(el.id==='query-select')followQuery(Number(el.value));
   if(el.id==='head-select'){S.head=Number(el.value);renderPanel();refreshFocus();if(S.view==='document')renderDocument();}
-  if(el.id==='word-select'){S.word=Number(el.value);S.focus=tokenForWord(S.word);renderPanel();refreshFocus();renderDocument();}
+  if(el.id==='word-select'){S.word=Number(el.value);S.focus=tokenForWord(S.word);renderPanel();refreshFocus();renderDocument();if(selectedStage().key==='rnn'&&S.view==='tower')focusStage();}
   if(el.id==='slot-select'){S.slot=Number(el.value);renderPanel();refreshFocus();}
   if(el.id==='bio-select'){S.bioLabel=Number(el.value);renderPanel();refreshFocus();}
   if(el.id==='upload'){uploadedFile=el.files[0];uploadDocument();}

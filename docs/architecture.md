@@ -109,7 +109,9 @@ Source: [`LayoutDebertaModel`](https://github.com/Knowledgator/GLiFormer/blob/73
 
 The model collects first-subword features for source words. Its one-layer bidirectional LSTM then updates those features in both source-order directions.
 
-The shape remains `[1,W,1024]`. Schema marker embeddings remain available separately. A hook captures the word-RNN input and output, allowing the selected word’s displayed dimensions to be compared before and after recurrence.
+Each direction has 512 hidden units. Their per-word outputs are concatenated, so the shape remains `[1,W,1024]`. Schema marker embeddings remain available separately. A hook captures the word-RNN input and output, allowing the selected word’s displayed dimensions to be compared before and after recurrence.
+
+The beginner view illustrates two readers carrying numerical summaries. Its arrows and replay markers show reading order, not measured gates or cell states. The input/output strips remain captured tensors. The saved first 32 output dimensions lie in the forward half; backward output starts at dimension 512. No previous hidden state is supplied, so memory starts afresh per sentence.
 
 The raw Transformer [CLS] vector used by classification is distinct from these recurrent source-word features.
 

@@ -98,6 +98,31 @@ export function createWalkthrough(canvas, options) {
   function vectorRows(p,rows,z=-1){
     rows.forEach((r,ri)=>{const n=r.values.length;flatText(p.labels,r.name,0,z-ri*.8-.4,.25,null,C.muted);r.values.forEach((v,j)=>tile(p,(j-(n-1)/2)*.25,z-ri*.8,.19,.32,.04+.35*Math.min(2,Math.abs(v)),v<0?C.warm:C.terra,{name:r.name+' · dimension '+j,value:v,caption:'Activation'}));});
   }
+  function lstmPlate(st,i,y){
+    const p=wordPlate(st,i,y,{depth:5.8,wz:1.45,wh:.16,back:1.2});
+    const lanes=[{z:-1.45,color:C.terra,direction:1,name:'left → right'},{z:-.05,color:C.slate,direction:-1,name:'right → left'}];
+    lanes.forEach(lane=>{
+      flatText(p.labels,lane.name,WL.xs[S.word],lane.z-.55,.29,null,lane.color);
+      DATA.words.forEach((word,j)=>{
+        const chosen=j===S.word;
+        tile(p,WL.xs[j],lane.z,WL.ws[j]*.7,.36,chosen?.3:.12,chosen?lane.color:mix(lane.color,C.paper,.55),{word:j,name:word.text+' · '+lane.name,caption:'A numerical summary is carried along this route. Schematic; gate and memory values are not measured here.'});
+        const next=j+lane.direction;if(next<0||next>=DATA.words.length)return;
+        const a=new THREE.Vector3(WL.xs[j]+lane.direction*WL.ws[j]*.36,TOP+.2,lane.z),b=new THREE.Vector3(WL.xs[next]-lane.direction*WL.ws[next]*.36,TOP+.2,lane.z);
+        const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([a,b]),new THREE.LineBasicMaterial({color:lane.color,transparent:true,opacity:.7}));line.userData.bo=.7;p.extra.add(line);
+        const arrow=new THREE.Mesh(new THREE.ConeGeometry(.06,.17,8),mat(lane.color));arrow.position.copy(b);arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(lane.direction,0,0));p.extra.add(arrow);
+      });
+      const dot=new THREE.Mesh(new THREE.SphereGeometry(.14,16,12),mat(lane.color));dot.visible=false;p.extra.add(dot);(p.readers??=[]).push({dot,z:lane.z,direction:lane.direction});
+    });
+    const x=WL.xs[S.word];
+    lanes.forEach(lane=>{
+      const a=new THREE.Vector3(x,TOP+.4,lane.z),b=new THREE.Vector3(x,TOP+.28,1.45),mid=a.clone().lerp(b,.5);mid.y+=.65;
+      p.extra.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a,mid,b),24,.023,6,false),mat(lane.color)));
+    });
+    p.word[S.word].material.color.set(C.ink);p.word[S.word].userData.item.caption='This word receives the two directional summaries. See With your sentence for the real before/after numbers.';
+    tag(p,DATA.words[S.word].text+' · join both summaries',x,TOP+1.15,1.45,C.ink,.3);
+    flatText(p.labels,'Two reading paths · schematic',x,2.4,.27,null,C.muted);
+    return p;
+  }
   function pagePlate(st,i,y){
     const ratio=DATA.document.width/DATA.document.height,depth=11,width=depth*ratio,p=makePlate(st,i,y,width+1,depth+1);
     const texture=new THREE.TextureLoader().load(DATA.document.image);texture.colorSpace=THREE.SRGBColorSpace;
@@ -131,6 +156,7 @@ export function createWalkthrough(canvas, options) {
     if(['tokens','embed','layer'].includes(key))return tokenPlate(st,i,y);
     if(['document','spatial'].includes(key))return pagePlate(st,i,y);
     if(['fields','slots','membership','hierarchy'].includes(key))return recordPlate(st,i,y);
+    if(key==='rnn')return lstmPlate(st,i,y);
     if(key==='classification'){
       const groups=DATA.stages.classes,layouts=groups.map(g=>row(g.labels,l=>clamp(.6+.13*l.length,1.2,3),.5)),p=makePlate(st,i,y,Math.max(8,...layouts.map(l=>l.total))+2,1.9*groups.length+1.2,-.95*(groups.length-1));
       groups.forEach((g,k)=>g.labels.forEach((label,j)=>{const prob=g.probs[j],chosen=(DATA.result.classification?.[0]?.[k]||[]).some(p=>p.class_name===label),x=layouts[k].xs[j],z=.2-1.9*k,h=.05+1.5*prob;tile(p,x,z,layouts[k].ws[j],.6,h,chosen?C.cls:mix(C.cls,C.paper,.62),{name:g.group+': '+label,value:prob});flatText(p.labels,label,x,z+.65,.3,layouts[k].ws[j],C.cls);if(chosen)tag(p,`${g.group}: ${label} · ${prob.toFixed(2)}`,x,TOP+h+.35,z,C.cls);}));return p;
@@ -146,7 +172,6 @@ export function createWalkthrough(canvas, options) {
     if(key==='words'){
       const sim=DATA.layers.at(-1).similarity[S.query];if(sim){const min=Math.min(...sim),max=Math.max(...sim);p.word.forEach((m,j)=>m.userData.target=.06+.62*(sim[j]-min)/(max-min||1));}
     }
-    if(key==='rnn')vectorRows(p,[{name:DATA.words[S.word].text+' · before LSTM',values:DATA.rnn.before[S.word]},{name:DATA.words[S.word].text+' · after LSTM',values:DATA.rnn.after[S.word]}],-1);
     if(key==='anchors'){
       const a=Object.entries(DATA.stages.anchors||{})[0];if(a?.[1].strip[0])vectorRows(p,[{name:a[0]+' · fused anchor–label vector',values:a[1].strip[0]}],-1.5);
     }
@@ -175,6 +200,7 @@ export function createWalkthrough(canvas, options) {
   function fitDistance(w,h){const fv=THREE.MathUtils.degToRad(camera.fov/2);return Math.max(w/2/(Math.tan(fv)*camera.aspect),h/2/Math.tan(fv));}
   function aimSun(tgt,w){sun.target.position.copy(tgt);sun.position.copy(tgt).add(new THREE.Vector3(-8,22,12));const sc=sun.shadow.camera,r=w/2+3;sc.left=-r;sc.right=r;sc.top=r;sc.bottom=-r;sc.near=1;sc.far=180;sc.updateProjectionMatrix();}
   function focusStage(){sync();const p=plates[S.step];if(!p)return;let span=p.width+3,x=0;
+    if(p.st.key==='rnn'&&DATA.words.length>12){const left=Math.max(0,S.word-3),right=Math.min(DATA.words.length-1,S.word+3);x=WL.xs[S.word];span=Math.max(15,WL.xs[right]-WL.xs[left]+5);}
     if(p.tok.length){const xs=[p.tok[S.focus].position.x];if(p.st.key==='layer')topAttn(p.st.layer).filter(([,j])=>j!==S.focus).sort((a,b)=>b[0]-a[0]).slice(0,6).forEach(([,j])=>xs.push(p.tok[j].position.x));x=(Math.min(...xs)+Math.max(...xs))/2;span=Math.max(Math.max(...xs)-Math.min(...xs)+5,12);}
     const raised=RAISED.has(p.st.key),dist=clamp(fitDistance(span,raised?7:Math.max(5,p.depth+1.5)),8,60),visW=2*dist*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.aspect,half=Math.max(0,p.width/2-visW/2+1.5),target=new THREE.Vector3(clamp(x,-half,half),p.y+(raised?.8:.3),.2+p.cz);
     fly(target.clone().addScaledVector(new THREE.Vector3(0,1,1).normalize(),dist),target);aimSun(target,Math.max(visW,p.width));
@@ -199,13 +225,17 @@ export function createWalkthrough(canvas, options) {
   function transition(from,to){const a=plates[from],b=plates[to];if(!a||!b)return;flow=[];const first=a.tok.length?a.tok:a.word,last=b.tok.length?b.tok:b.word;
     last.forEach((target,i)=>{if(!target)return;let origin=first[i];if(a.tok.length&&!b.tok.length){const k=DATA.tokens.findIndex(t=>t.word===i);origin=a.tok[k];}if(!origin)return;const start=a.group.localToWorld(new THREE.Vector3(origin.position.x,TOP+origin.userData.target,origin.position.z)),end=b.group.localToWorld(new THREE.Vector3(target.position.x,TOP+target.userData.target,target.position.z));flow.push({start,end,color:target.userData.color});});flow=flow.slice(0,400);flowStart=performance.now();particles.count=flow.length;
   }
+  function replayLSTM(){const p=plates[S.step];if(p?.st.key!=='rnn')return;p.readStart=performance.now();p.readers.forEach(r=>r.dot.visible=true);}
   const transform=new THREE.Object3D(),tint=new THREE.Color();
   function frame(now){requestAnimationFrame(frame);if(tween){const t=tween.duration?clamp((now-tween.start)/tween.duration,0,1):1,e=1-(1-t)**3;camera.position.lerpVectors(tween.p0,tween.p1,e);controls.target.lerpVectors(tween.t0,tween.t1,e);if(t===1)tween=null;}controls.update();const dist=camera.position.distanceTo(controls.target);scene.fog.near=dist+30;scene.fog.far=dist*2.5+110;
     plates.forEach(p=>{p.op+=(p.target-p.op)*.14;p.group.visible=p.op>.01;p.base.material.opacity=.15+.85*p.op;p.title.material.opacity=p.op<.05?0:.3+.7*p.op;p.tiles.forEach(m=>{m.material.opacity=p.op;m.userData.h+=(m.userData.target-m.userData.h)*.13;m.scale.y=m.userData.h;m.position.y=TOP+m.userData.h/2;});p.extra.children.forEach(o=>{if(o.material)o.material.opacity=(o.userData.bo??1)*p.op;});});
+    plates.forEach(p=>{if(p.readStart===undefined)return;const duration=clamp(DATA.words.length*400,2800,8000),t=(now-p.readStart)/duration;const active=S.view==='tower'&&!S.intro&&!S.overview&&S.step===p.idx;
+      p.readers.forEach(reader=>{reader.dot.visible=active&&t<=1;if(!reader.dot.visible)return;const f=reader.direction===1?clamp(t,0,1):1-clamp(t,0,1),position=f*(WL.xs.length-1),j=Math.floor(position),k=Math.min(j+1,WL.xs.length-1);reader.dot.position.set(THREE.MathUtils.lerp(WL.xs[j],WL.xs[k],position-j),TOP+.55,reader.z);});if(!active||t>1)delete p.readStart;
+    });
     if(S.view==='map'){mapPoints.forEach(m=>{m.position.lerp(m.userData.target,.08);if(m.userData.tag)m.userData.tag.position.copy(m.position).add(new THREE.Vector3(0,.38,0));});if(nearest?.userData.pair){const [a,b]=nearest.userData.pair,pos=nearest.geometry.attributes.position;pos.setXYZ(0,...mapPoints[a].position.toArray());pos.setXYZ(1,...mapPoints[b].position.toArray());pos.needsUpdate=true;nearest.geometry.computeBoundingSphere();}}
     if(particles.count){const t=(now-flowStart)/1100;if(t>1.3)particles.count=0;else{flow.forEach((p,i)=>{const f=clamp(t-i*.0015,0,1);transform.position.lerpVectors(p.start,p.end,f);transform.scale.setScalar(Math.sin(Math.PI*f)*.9);transform.updateMatrix();particles.setMatrixAt(i,transform.matrix);particles.setColorAt(i,tint.set(p.color));});particles.instanceMatrix.needsUpdate=true;if(particles.instanceColor)particles.instanceColor.needsUpdate=true;}}
     renderer.render(scene,camera);
   }
   resize();requestAnimationFrame(frame);
-  return{buildTower,refreshFocus,buildMap,updateMap,resize,towerCamera,introCamera:towerCamera,focusStage,fly,pickAt,setView,setTrails,transition};
+  return{buildTower,refreshFocus,buildMap,updateMap,resize,towerCamera,introCamera:towerCamera,focusStage,fly,pickAt,setView,setTrails,transition,replayLSTM};
 }

@@ -52,6 +52,8 @@ The live server defaults to localhost, CPU inference and four PyTorch threads. U
 
 The tower lets you step through every layer, play the stages, orbit and zoom, inspect individual pieces, choose a schema marker, and inspect any of the 16 attention heads. The meaning map projects hidden states into 3D and aligns successive layers so movement is easier to follow.
 
+The LSTM stage introduces the idea with two readers and numerical notepads, a concrete sentence, and a replay of both reading directions. The schematic is separate from the real input/output values shown in the sentence tab.
+
 Each stage has its own diagram. Entity decisions label complete source spans; BIO shows start/end/inside scores at words; relations draw directed candidate links; records use fixed slots and span-membership connections. Previous stages remain faintly visible for context, following the original visualizer. The meaning map includes trails and the full-space nearest-word link.
 
 <table>
@@ -173,6 +175,7 @@ uv run python scripts/browser_qa.py       # requires the live server and Chrome
 uv run python scripts/document_qa.py      # PDF, page selection, image OCR and real-model alignment
 uv run python scripts/verify_traces.py    # numeric/source invariants across all 17 recorded traces
 uv run python scripts/reference_qa.py     # every visual stage and the original layout conventions
+uv run python scripts/lstm_qa.py          # beginner LSTM copy, replay and word inspection
 ```
 
 The browser check covers every task, all explanation tabs, real attention-head selection, the meaning map, document-box selection, geometry enabled/disabled, a custom sentence, mobile overflow and JavaScript errors. The model check performs real inference for all task tabs. Baking also exercises every preset, including the nested company schema.
