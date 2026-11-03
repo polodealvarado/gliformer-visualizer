@@ -156,6 +156,7 @@ class Trace:
     def __init__(self, model):
         self.data = {}
         self.active = False
+        self.head_stack = []
         self.model = model
         self.encoder = model.model.token_rep_layer.bert_layer.model
 
@@ -176,16 +177,27 @@ class Trace:
         self.encoder.register_forward_pre_hook(encoder_before, with_kwargs=True)
         self.encoder.register_forward_hook(encoder_after)
         model.model.register_forward_hook(model_after, with_kwargs=True)
+        anchor_modules = set()
         for name, head in model.model.heads.items():
+            def head_before(module, args, kwargs, key=name):
+                if self.active:
+                    self.head_stack.append(key)
+
             def head_after(module, args, kwargs, output, key=name):
                 if self.active:
                     self.data.setdefault("heads", {}).setdefault(key, []).append(output)
+                    self.head_stack.pop()
+            head.register_forward_pre_hook(head_before, with_kwargs=True)
             head.register_forward_hook(head_after, with_kwargs=True)
-            if hasattr(head, "anchor_modeling"):
-                def anchor_after(module, args, output, key=name):
-                    if self.active and key not in self.data.setdefault("anchors", {}):
-                        self.data["anchors"][key] = output
-                head.anchor_modeling.register_forward_hook(anchor_after)
+            if hasattr(head, "anchor_modeling") and id(head.anchor_modeling) not in anchor_modules:
+                anchor_modules.add(id(head.anchor_modeling))
+
+                def anchor_after(module, args, kwargs, output, key=name):
+                    if self.active:
+                        task = "structuring" if "structuring" in self.head_stack else self.head_stack[-1]
+                        self.data.setdefault("anchors", []).append({"head": key, "task": task,
+                            "anchor": args[0], "child": args[1], "output": output})
+                head.anchor_modeling.register_forward_hook(anchor_after, with_kwargs=True)
         if hasattr(model.model, "rnn"):
             def rnn_after(module, args, output):
                 if self.active:
@@ -194,6 +206,7 @@ class Trace:
 
     def reset(self):
         self.data = {}
+        self.head_stack = []
         self.active = True
 
 
@@ -277,7 +290,28 @@ def tokenize_trace(model, batch):
             while end < len(ids) and ids[end] not in types and ids[end] != tokenizer.sep_token_id and wm[end] == 0:
                 end += 1
             label = tokenizer.decode(ids[i + 1:end]).strip() or "shared schema"
-            queries.append({"token": i, "name": label, "kind": types[tid]})
+            parent = next((j for j in range(len(queries) - 1, -1, -1) if queries[j]["kind"] == "schema"), None)
+            queries.append({"token": i, "name": label, "kind": types[tid],
+                            "parent": parent if types[tid] != "schema" else None})
+    # The canonical mapping excludes structural CHILD/END prompt syntax and
+    # preserves requested names even when tokenizer normalization changes text.
+    mapping = batch["classes_mapping"]
+    names = {
+        "entity": [name for group in mapping.extraction_mapping for item in group.items
+                   for name in item.ner_class_to_id.class_to_id],
+        "relation": [name for group in mapping.extraction_mapping for item in group.items
+                     if item.rel_class_to_id is not None for name in item.rel_class_to_id.class_to_id],
+        "class": [name for group in mapping.cat_mapping for item in group.cat_class_to_id
+                  for name in item.class_to_id],
+        "field": [name for group in mapping.structuring_mapping for item in group.items
+                  for name in item.field_class_to_id.class_to_id],
+    }
+    for kind, labels in names.items():
+        markers = [query for query in queries if query["kind"] == kind]
+        if len(markers) != len(labels):
+            raise ValueError(f"Prompt marker count does not match {kind} labels.")
+        for query, label in zip(markers, labels):
+            query["name"] = label
     qm = {q["token"]: i for i, q in enumerate(queries)}
     tokens = [{"piece": p, "id": tid, "kind": "text" if wm[i] > 0 else
                (types.get(tid, "special" if tid in tokenizer.all_special_ids else "prompt")),
@@ -321,6 +355,39 @@ def span_text(words, text, s, e):
         return {"text": "", "start": 0, "end": 0, "s": s, "e": e}
     start, end = words[s]["start"], words[e]["end"]
     return {"text": text[start:end], "start": start, "end": end, "s": s, "e": e}
+
+
+def anchor_trace(trace, batch, queries):
+    """Associate every real fusion row with its prompt marker, including reused NER calls."""
+    mapping = batch["classes_mapping"]
+    questions = []
+    for capture in trace.data.get("anchors", []):
+        task = capture["task"]
+        if task == "ner":
+            kind = "entity"
+            groups = [item.ner_class_to_id for item in mapping.extraction_mapping[0].items]
+        elif task == "classification":
+            kind = "class"
+            groups = mapping.cat_mapping[0].cat_class_to_id
+        elif task == "structuring":
+            kind = "field"
+            groups = [item.field_class_to_id for item in mapping.structuring_mapping[0].items]
+        else:
+            raise ValueError(f"Unmapped anchor capture: {task}")
+        markers = iter((index, query) for index, query in enumerate(queries) if query["kind"] == kind)
+        value = capture["output"]
+        for group, labels in enumerate(groups):
+            for child, label in enumerate(labels.class_to_id):
+                index, query = next(markers)
+                if query["name"] != label:
+                    raise ValueError("Captured anchor labels do not match prompt order.")
+                questions.append({"query": index, "parent": query["parent"], "task": task,
+                    "head": capture["head"], "group": labels.name or "entities", "label": label,
+                    "shape": list(value.shape), "indices": [group, 0, child],
+                    "anchor": rounded(capture["anchor"][group, 0, :32], 3),
+                    "label_vector": rounded(capture["child"][group, child, :32], 3),
+                    "fused": rounded(value[group, 0, child, :32], 3)})
+    return {"questions": questions}
 
 
 def extraction_trace(output, batch, spec, words):
@@ -405,9 +472,7 @@ def analyze(model, trace, spec):
                 tokens, queries = tokenize_trace(model, batch)
                 layers = encoder_trace(trace, tokens, queries, words)
                 stages = extraction_trace(output, batch, spec, words)
-                stages["anchors"] = {name: {"shape": list(value.shape),
-                    "strip": rounded(value.reshape(-1, value.shape[-1])[:100, :32], 3)}
-                    for name, value in trace.data.get("anchors", {}).items()}
+                stages["anchors"] = anchor_trace(trace, batch, queries)
                 word_vectors = rounded(output.words_embedding[0, :len(words), :32], 3)
                 rnn = trace.data.get("rnn")
                 rnn_data = {"before": rounded(rnn[0][0, :len(words), :32], 3),

@@ -123,7 +123,13 @@ For NER and classification, the parent schema marker supplies an anchor. `Linear
 
 This conditions each label on its task group. It is not the fixed list of record slots used later by structuring.
 
-The visualizer captures fused anchor/label outputs from the normal modules. Shared NER modules can be called for entity extraction and again for structuring fields; a trace explicitly identifies the head and records the first observed fused vectors.
+The visualizer captures the actual anchor input, label input and fused output from every normal anchor-modeling call. A head-call stack distinguishes ordinary entity extraction from the reused NER call for structuring fields. The batch mappings associate each unpadded group/label row with its exact prompt marker and parent marker. Each trace exports 32 dimensions from all three vectors, the task, head, group, full tensor shape and selected row indices.
+
+The beginner view uses a question-sheet analogy: task heading plus requested label produces a prepared question. A human-readable question is only a UI paraphrase, never an extra model input. The scene illustrates this composition with schematic arrows and measured output bars. Selecting another label switches both the diagram and all three tensor strips to that label's captured row. The source words remain neutral because this stage has not decoded an answer.
+
+Label names come from the batch's canonical mappings. This preserves nested field paths without including structural CHILD/END prompt syntax in their display names.
+
+Contextualized relation markers follow their separate pair-scoring route. Selecting one shows its encoder vector without inventing a parent/label fusion. Selecting a schema marker shows its shared context. Record-slot anchors remain a separate later stage.
 
 Source: [`AnchoredSpanExtractionHead`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/anchored_extraction.py), [`LinearAnchorModeling`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/layers/anchor_modeling.py).
 

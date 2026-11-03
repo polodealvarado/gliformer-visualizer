@@ -54,6 +54,8 @@ The tower lets you step through every layer, play the stages, orbit and zoom, in
 
 The LSTM stage introduces the idea with two readers and numerical notepads, a concrete sentence, and a replay of both reading directions. The schematic is separate from the real input/output values shown in the sentence tab.
 
+The anchors stage builds a question from its task context and requested label. Selecting a label updates the diagram and its three real vector strips: parent context, label and fused question. Relation labels and later record slots retain their distinct routes. [Preview the explanation](docs/anchors.png).
+
 Each stage has its own diagram. Entity decisions label complete source spans; BIO shows start/end/inside scores at words; relations draw directed candidate links; records use fixed slots and span-membership connections. Previous stages remain faintly visible for context, following the original visualizer. The meaning map includes trails and the full-space nearest-word link.
 
 <table>
@@ -163,6 +165,8 @@ Content-Type: application/json
 
 The response contains input/schema, source words and character offsets, tokenizer pieces, schema markers, 25 hidden-state snapshots, 24 attention snapshots, word-RNN before/after strips, head scores, decoded results and provenance.
 
+`stages.anchors.questions` links each entity, class or field question to its prompt marker and parent marker. Each item includes actual parent, label and fused vector strips, plus its task, group, tensor shape and row indices. Structure fields retain their canonical paths, including nested schemas.
+
 `POST /api/document` accepts `{name, data, page}` where `data` is base64 file content and `page` is zero-based. It returns an image, text and aligned word boxes. Pass that object as `document` to `/api/analyze`, with its exact `text` and an optional `use_layout` boolean.
 
 ## Validation
@@ -176,6 +180,7 @@ uv run python scripts/document_qa.py      # PDF, page selection, image OCR and r
 uv run python scripts/verify_traces.py    # numeric/source invariants across all 17 recorded traces
 uv run python scripts/reference_qa.py     # every visual stage and the original layout conventions
 uv run python scripts/lstm_qa.py          # beginner LSTM copy, replay and word inspection
+uv run python scripts/anchors_qa.py       # selected questions, exact tensor rows and nested field labels
 ```
 
 The browser check covers every task, all explanation tabs, real attention-head selection, the meaning map, document-box selection, geometry enabled/disabled, a custom sentence, mobile overflow and JavaScript errors. The model check performs real inference for all task tabs. Baking also exercises every preset, including the nested company schema.

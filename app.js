@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {createWalkthrough} from './walkthrough.js';
-import {TASKS, LESSONS} from './lessons.js';
+import {TASKS, LESSONS, describeQuestion} from './lessons.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -36,7 +36,7 @@ async function compressedJSON(path) {
 function showError(message='') {$('#error').hidden=!message;$('#error').textContent=message;}
 function busy(value) {
   S.busy=value;$('#busy').hidden=!value;
-  $$('#tasks button,#examples button,#analyze-form input,#analyze-form textarea,#run,#document-page').forEach(el=>el.disabled=value||STATIC&&el.closest('#analyze-form')!==null);
+  $$('#tasks button,#examples button,#analyze-form input,#analyze-form textarea,#run,#document-page').forEach(el=>el.disabled=value||STATIC&&el.matches('input,textarea,#run,#document-page'));
   $('#download').disabled=value||!DATA;
 }
 function parseNames(value){return value.split(',').map(s=>s.trim()).filter(Boolean);}
@@ -162,6 +162,20 @@ function queryControl() {
   return `<label class="sub-label" for="query-select">Follow a schema question</label><select class="query-selector" id="query-select">${DATA.queries.map((q,i)=>`<option value="${i}" ${i===S.query?'selected':''}>${esc(q.kind+' · '+q.name)}</option>`).join('')}</select>`;
 }
 function wordControl(){return `<label class="sub-label" for="word-select">Inspect a source word</label><select class="query-selector" id="word-select">${DATA.words.map((w,i)=>`<option value="${i}" ${i===S.word?'selected':''}>${i} · ${esc(w.text)}</option>`).join('')}</select>`;}
+function anchorQuestionContent(numbers=false){
+  const d=describeQuestion(DATA,S.query);if(!d)return '';
+  const {q,capture:a,context,prompt,next}=d;
+  let html=queryControl();
+  if(a){
+    html+=`<div class="question-example" style="--q:${queryColor(q)}" data-question="${S.query}"><div class="question-inputs"><div><small>1 · Task context</small><b>${esc(context)}</b><span>parent anchor</span></div><span class="question-plus">+</span><div><small>2 · Label to find</small><b>${esc(q.name)}</b><span>${esc(q.kind==='class'?'[CLASS]':q.kind==='field'?'[FIELD]':'[ENTITY]')} marker</span></div></div><div class="question-output"><small>↓ 3 · Combine their numbers</small><b>${esc(prompt)}</b><span>prepared question vector</span></div></div><p class="help">The question above is a plain-language paraphrase. The model combines numerical vectors; it does not generate that sentence.</p>`;
+    if(numbers)html+=`<h3>1 · Task context · ${esc(context)}</h3>${strip(a.anchor)}<h3>2 · Label · ${esc(q.name)}</h3>${strip(a.label_vector)}<h3>3 · Prepared question · ${esc(q.name)}</h3>${strip(a.fused)}<p>${esc(next)}.</p>${note('These are actual inputs and output of this label’s fusion. The numbers are features, not probabilities. Changing labels switches to that label’s captured row.')}<details><summary>Tensor location</summary><p><code>${esc(a.head)}</code> head · ${esc(a.task)} task · group ${esc(a.group)}</p><code>${esc(a.shape.join(' × '))}</code><p class="help">Axes: groups × parent anchors × labels × dimensions.<br>Selected row: [${a.indices.join(', ')}]. Only 32 of 1024 dimensions are displayed.</p></details>`;
+  }else if(q.kind==='relation'){
+    html+=`<h3>${esc(prompt)}</h3><p>This relation question follows a separate route. Its contextualized <b>[RELATION]</b> marker will be compared with directed entity pairs, such as person → organization.</p>${numbers?`<h3>Relation marker · ${esc(q.name)}</h3>${strip(DATA.layers.at(-1).strip[q.token])}`:''}${note('This checkpoint does not apply the parent–label linear fusion to relation labels. Select an entity, class or field to inspect that operation.')}`;
+  }else if(q.kind==='schema'){
+    html+=`<h3>Task heading · ${esc(q.name)}</h3><p>This marker supplies the shared context for the labels in its group. Choose one of those labels to see how the two are combined.</p>${numbers?strip(DATA.layers.at(-1).strip[q.token]):''}`;
+  }else html+=empty('No captured fusion is available for this marker.');
+  return html;
+}
 function lstmWordContent(){
   const word=DATA.words[S.word],before=DATA.words.slice(0,S.word),after=DATA.words.slice(S.word+1);
   const context=words=>words.length?(words.length>8?'… ':'')+esc(words.slice(-8).map(w=>w.text).join(' ')):'<em>no earlier words in this reading direction</em>';
@@ -211,7 +225,7 @@ function dataContent(key) {
     }
     case 'words':return `${wordControl()}<p>The selected word starts at subword token <b>${tokenForWord(S.word)}</b>.</p><h3>After the Transformer</h3>${strip(DATA.layers.at(-1).strip[tokenForWord(S.word)])}`;
     case 'rnn':return lstmWordContent();
-    case 'anchors':return `${queryControl()}${Object.entries(DATA.stages.anchors||{}).map(([name,a])=>`<h3>${esc(name)} · fused question vectors</h3><code>${esc(a.shape.join(' × '))}</code>${a.strip.length?strip(a.strip[0]):''}`).join('')}${note('The strips above show the first fused anchor–label vector captured in each head. Shared NER calls can also supply structure-field questions.')}`;
+    case 'anchors':return anchorQuestionContent(true);
     case 'bio': {
       const bio=selectedBio();if(!bio)return empty('This run has no standalone entity BIO scores.');
       const i=clamp(S.bioLabel,0,bio.labels.length-1);
@@ -263,7 +277,7 @@ function renderPanel() {
     $('#stage-number').textContent='Alternative view';$('#stage-title').textContent='Meaning map';$('#stage-subtitle').textContent='Where the model places each piece, layer by layer.';html=meaningContent();
   } else if(S.overview) {
     html=`<p>This is <b>GLiFormer Large v1</b> by Knowledgator. Follow your input through its shared encoder, then into the ${esc(TASKS[S.task].title.toLowerCase())} head.</p><p>Pick a plate in the tower or a stage in the list. Use the three tabs to move from the plain-language idea to the real values and the source code.</p>${stats([[INFO.layers,'Transformer layers'],[nf(INFO.hidden),'dimensions'],[(INFO.params/1e6).toFixed(1)+'M','parameters']])}<div class="mini-nav"><button data-jump="input">Start at the input →</button><button data-jump="result">See the answers →</button></div>${note(DATA.document?'This run follows a page through text extraction and 2D layout. Click Document to see the boxes.':'Every attention weight, vector strip and task score comes from this sentence’s real forward pass.')}<h3>This run</h3><p class="sentence">${esc(DATA.input.text)}</p>`;
-  } else if(S.tab==='what')html=st.what;
+  } else if(S.tab==='what')html=(st.key==='anchors'?anchorQuestionContent():'')+st.what;
   else if(S.tab==='data')html=dataContent(st.key);
   else html=st.tech+`<dl class="tech"><dt>Checkpoint</dt><dd>${esc(INFO.name)}@${INFO.revision?.slice(0,8)||'local'}</dd><dt>Framework</dt><dd>GLiFormer ${esc(INFO.versions.gliformer)}</dd><dt>Device</dt><dd>${esc(INFO.device)}</dd></dl><p><a href="${INFO.sources[st.source]||INFO.sources.encoder}" target="_blank" rel="noopener">Read the exact source revision ↗</a></p>`;
   $('#panel-content').innerHTML=html;
