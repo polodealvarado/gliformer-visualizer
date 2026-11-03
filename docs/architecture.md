@@ -109,7 +109,9 @@ Source: [`LayoutDebertaModel`](https://github.com/Knowledgator/GLiFormer/blob/73
 
 The model collects first-subword features for source words. Its one-layer bidirectional LSTM then updates those features in both source-order directions.
 
-The shape remains `[1,W,1024]`. Schema marker embeddings remain available separately. A hook captures the word-RNN input and output, allowing the selected word’s displayed dimensions to be compared before and after recurrence.
+Each direction has 512 hidden units. Their per-word outputs are concatenated, so the shape remains `[1,W,1024]`. Schema marker embeddings remain available separately. A hook captures the word-RNN input and output, allowing the selected word’s displayed dimensions to be compared before and after recurrence.
+
+The beginner view illustrates two readers carrying numerical summaries. Its arrows and replay markers show reading order, not measured gates or cell states. The input/output strips remain captured tensors. The saved first 32 output dimensions lie in the forward half; backward output starts at dimension 512. No previous hidden state is supplied, so memory starts afresh per sentence.
 
 The raw Transformer [CLS] vector used by classification is distinct from these recurrent source-word features.
 
@@ -121,13 +123,32 @@ For NER and classification, the parent schema marker supplies an anchor. `Linear
 
 This conditions each label on its task group. It is not the fixed list of record slots used later by structuring.
 
-The visualizer captures fused anchor/label outputs from the normal modules. Shared NER modules can be called for entity extraction and again for structuring fields; a trace explicitly identifies the head and records the first observed fused vectors.
+The visualizer captures the actual anchor input, label input and fused output from every normal anchor-modeling call. A head-call stack distinguishes ordinary entity extraction from the reused NER call for structuring fields. The batch mappings associate each unpadded group/label row with its exact prompt marker and parent marker. Each trace exports 32 dimensions from all three vectors, the task, head, group, full tensor shape and selected row indices.
+
+The beginner view uses a question-sheet analogy: task heading plus requested label produces a prepared question. A human-readable question is only a UI paraphrase, never an extra model input. The scene illustrates this composition with schematic arrows and measured output bars. Selecting another label switches both the diagram and all three tensor strips to that label's captured row. The source words remain neutral because this stage has not decoded an answer.
+
+Label names come from the batch's canonical mappings. This preserves nested field paths without including structural CHILD/END prompt syntax in their display names.
+
+Contextualized relation markers follow their separate pair-scoring route. Selecting one shows its encoder vector without inventing a parent/label fusion. Selecting a schema marker shows its shared context. Record-slot anchors remain a separate later stage.
 
 Source: [`AnchoredSpanExtractionHead`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/anchored_extraction.py), [`LinearAnchorModeling`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/layers/anchor_modeling.py).
 
 ## 7. Named entities
 
 `AnchoredSpanScorer` projects question and source-word vectors, combines them in an MLP and produces three logits per word and entity type:
+
+```text
+[w1, w2] = Linear_word(word)       # 1024 → 2048, split into two 1024-vectors
+[q1, q2] = Linear_label(question)  # 1024 → 2048, split into two 1024-vectors
+features = concat(w1, q1, w2 * q2) # elementwise interaction; 3072 dimensions
+logits = Linear_3(ReLU(Linear_4096(features)))
+```
+
+The word input is the post-LSTM feature; the question input is the fused parent/label representation from the preceding stage. The scorer evaluates every word–label pair in parallel. It is not the cosine similarity displayed in the meaning map. The evaluation path disables the MLP's dropout.
+
+The “Question → word scores” teaching stage isolates one selected pair. Its input strips use captured question and word vectors; its output uses the captured entity or field BIO probabilities. Its network block and arrows are schematic: intermediate projections, products and MLP activations are not captured. Selection retains the exact label and group when moving from question preparation to scoring, sequence scores and final spans. Classification and relation labels retain their separate scoring routes.
+
+The final entity explanation shows a returned mention alongside its actual per-word start/end/inside evidence. It does not rerun decoding or compute a replacement confidence from rounded display scores.
 
 ```text
 ner_logits: [groups,W,entity types,3]
@@ -140,7 +161,7 @@ A greedy search resolves overlaps. The app uses `flat_ner=True`. Internal word e
 
 There is no GLiNER2.5 gap encoder, shared boundary candidate pool, null-abstention head or record anchor-span decoder in this checkpoint.
 
-Source: [`NERHead`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/ner/model.py), [`SpanDecoder`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/span_decoder.py).
+Source: [`AnchoredSpanScorer`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/layers/anchored_scorer.py), [`NERHead`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/ner/model.py), [`SpanDecoder`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/span_decoder.py).
 
 ## 8. Whole-text classification
 
@@ -230,3 +251,17 @@ The server observes normal framework inference. It requests additional encoder o
 The presentation compresses data in explicit ways: 32-dimensional display strips, rounded numbers, mean token attention and a three-dimensional PCA projection. It retains all 100 slot scores, full sentence embeddings and captured candidate scores in downloadable traces. It does not export all 1,024 hidden dimensions for every layer.
 
 Timings distinguish model inference from total trace preparation. The app’s measurements describe short examples on the current host, not a benchmark or throughput guarantee.
+
+
+## Visual conventions shared with Inside GLiNER2.5
+
+The interface reuses the original visualizer's top composer, Inter/Playfair Display/IBM Plex Mono typography, stage descriptions and three explanation tabs.
+The original local `index.html` was verified byte-for-byte against the deployed Hugging Face Space on 2026-11-02 (SHA-256 `b4f24cba07551c558aadaa52050786b1b90c55a25074cc9de3e60a73a6c68920`).
+
+`walkthrough.js` adapts the original plate geometry, canvas text, row layout, source-span labels, camera fitting, stage fading and transition particles.
+Words retain their relative horizontal positions between word-level stages. Complete entities share one type color and one score label over the full mention.
+Previous plates remain faintly visible; later plates fade away. Token plates separate prompt groups from the source sentence.
+
+GLiFormer-specific builders show word start/end/inside scores, the word LSTM, parent-anchor conditioning, directed entity pairs, fixed record slots, membership, hierarchy and document geometry.
+They do not introduce GLiNER2.5 gap vectors, shared boundary pools or span-anchored record instances.
+Sentence embeddings and the meaning map retain their separate numerical contracts described above.

@@ -28,6 +28,20 @@ for item in manifest["traces"]:
     for group in data["stages"].get("classes", []):
         for logit, probability in zip(group["logits"], group["probs"]):
             assert abs(1 / (1 + math.exp(-logit)) - probability) < 0.0002
+    fused_questions = data["stages"].get("anchors", {}).get("questions", [])
+    expected = {i for i, q in enumerate(data["queries"]) if q["kind"] in ("entity", "class", "field")}
+    assert {a["query"] for a in fused_questions} == expected
+    assert len(fused_questions) == len(expected)
+    for question in fused_questions:
+        query = data["queries"][question["query"]]
+        parent = data["queries"][question["parent"]]
+        assert question["label"] == query["name"] and parent["kind"] == "schema"
+        assert query["parent"] == question["parent"]
+        assert question["anchor"] == data["layers"][-1]["strip"][parent["token"]]
+        assert question["label_vector"] == data["layers"][-1]["strip"][query["token"]]
+        assert len(question["fused"]) == 32
+        assert question["shape"][1] == 1 and question["shape"][-1] == 1024
+        assert all(0 <= i < size for i, size in zip(question["indices"], question["shape"]))
     for record in data["stages"].get("records", []):
         assert len(record["objectness"]) == len(record["memberships"]) == 100
         assert all(len(row) == len(record["spans"]) for row in record["memberships"])
@@ -38,4 +52,4 @@ for item in manifest["traces"]:
             for j, b in enumerate(embeddings["vectors"]):
                 cos = sum(x * y for x, y in zip(a, b)) / math.sqrt(sum(x * x for x in a) * sum(y * y for y in b))
                 assert abs(cos - embeddings["similarities"][i][j]) < 0.0001
-print(f"OK: all {len(manifest['traces'])} real traces: attention, source offsets, sigmoid scores, slots and full-vector cosines.")
+print(f"OK: all {len(manifest['traces'])} real traces: attention, offsets, sigmoid, exact anchor/label mapping, slots and cosines.")
