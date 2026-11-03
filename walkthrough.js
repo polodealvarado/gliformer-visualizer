@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
-import {describeQuestion} from './lessons.js';
+import {describeQuestion, wordQuestion} from './lessons.js';
 
 // The original GLiNER2 plate, text, camera and fading conventions, with GLiFormer-specific builders.
 export function createWalkthrough(canvas, options) {
@@ -97,7 +97,38 @@ export function createWalkthrough(canvas, options) {
     return curve;
   }
   function vectorRows(p,rows,z=-1){
-    rows.forEach((r,ri)=>{const n=r.values.length;flatText(p.labels,r.name,0,z-ri*.8-.4,r.labelSize||.25,r.maxWidth||null,C.muted);r.values.forEach((v,j)=>tile(p,(j-(n-1)/2)*.25,z-ri*.8,.19,.32,.04+.35*Math.min(2,Math.abs(v)),v<0?C.warm:C.terra,{name:r.name+' · dimension '+j,value:v,caption:'Activation'}));});
+    rows.forEach((r,ri)=>{const n=r.values.length,x=r.x||0,cell=r.cell||.25;
+      if(r.floating){const t=tag(p,r.name,x,TOP+1.2,z-ri*.8,C.muted,r.labelSize||.3);if(r.maxWidth&&t.scale.x>r.maxWidth)t.scale.multiplyScalar(r.maxWidth/t.scale.x);}
+      else flatText(p.labels,r.name,x,z-ri*.8-.4,r.labelSize||.25,r.maxWidth||null,C.muted);
+      r.values.forEach((v,j)=>tile(p,x+(j-(n-1)/2)*cell,z-ri*.8,cell*.76,.32,.04+.35*Math.min(2,Math.abs(v)),v<0?C.warm:C.terra,{name:r.name+' · dimension '+j,value:v,caption:'Activation'}));});
+  }
+  function routeArrow(p,x,z,tx,tz,color){
+    const from=new THREE.Vector3(x,TOP+.17,z),to=new THREE.Vector3(tx,TOP+.17,tz),direction=to.clone().sub(from).normalize();
+    const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([from,to]),new THREE.LineBasicMaterial({color,transparent:true,opacity:.8}));line.userData.bo=.8;p.extra.add(line);
+    const tip=new THREE.Mesh(new THREE.ConeGeometry(.08,.22,8),mat(color));tip.position.copy(to);tip.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction);p.extra.add(tip);
+  }
+  function scorerPlate(st,i,y){
+    const d=wordQuestion(DATA,S.query),long=DATA.words.length>12,x=long?WL.xs[S.word]:0;
+    const p=wordPlate(st,i,y,{depth:10.8,wz:3.1,wh:.14,minWidth:long?WL.total+16:18});
+    if(!d)return p;
+    const word=DATA.words[S.word],values=d.probabilities[S.word],c=qColor(d.q);
+    vectorRows(p,[{name:'1 · Prepared question · '+d.q.name,values:d.capture.fused,x:x-4.1,cell:.14,labelSize:.34,maxWidth:6,floating:true}],-3.6);
+    vectorRows(p,[{name:'2 · Word vector · '+word.text,values:DATA.word_vectors[S.word],x:x+4.1,cell:.14,labelSize:.34,maxWidth:6,floating:true}],-3.6);
+    flatText(p.labels,'Same question',x-4.1,-2.9,.29,6,c);flatText(p.labels,'Changes with the word',x+4.1,-2.9,.29,6,C.muted);
+    routeArrow(p,x-4.1,-2.5,x-1.4,-2,C.word);routeArrow(p,x+4.1,-2.5,x+1.4,-2,C.word);
+    tile(p,x,-1.45,6,.7,.35,C.word2,{name:'Learned comparison network',caption:'Schematic: learned projections, feature interaction, MLP, then sigmoid. Hidden activations are not captured.'});
+    tag(p,'3 · Learned scorer + sigmoid',x,TOP+.7,-1.45,C.ink,.36);
+    ['start','end','inside'].forEach((name,j)=>{
+      const bx=x+(j-1)*2.7,color=[C.terra,C.slate,C.olive][j],prob=values[j];
+      routeArrow(p,x,-.85,bx,-.15,color);
+      tile(p,bx,.5,1.25,.6,.04+prob*.9,color,{word:S.word,name:word.text+' · '+name+' · '+d.q.name,value:prob,caption:'Captured sigmoid probability'});
+      tag(p,prob.toFixed(3),bx,TOP+1.4,.5,color,.4);flatText(p.labels,name,bx,1.15,.37,2,color);
+    });
+    p.word[S.word].material.color.set(C.ink);p.word[S.word].userData.target=.3;
+    tag(p,'Selected word · '+word.text,WL.xs[S.word],TOP+.8,3.1,C.ink,.3);
+    flatText(p.labels,'Repeat for every word · click a word to inspect it',x,4.2,.3,16,C.ink);
+    flatText(p.labels,'Network and arrows: schematic · input bars and output scores: real',x,4.9,.25,16,C.muted);
+    return p;
   }
   function lstmPlate(st,i,y){
     const p=wordPlate(st,i,y,{depth:5.8,wz:1.45,wh:.16,back:1.2});
@@ -129,11 +160,7 @@ export function createWalkthrough(canvas, options) {
     if(!d)return p;
     const {q,capture:a,context,next}=d,c=qColor(q);
     // Connections illustrate the operation; only the bars encode measured tensor values.
-    const arrow=(x,z,tx,tz,color)=>{
-      const from=new THREE.Vector3(x,TOP+.17,z),to=new THREE.Vector3(tx,TOP+.17,tz),direction=to.clone().sub(from).normalize();
-      const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([from,to]),new THREE.LineBasicMaterial({color,transparent:true,opacity:.8}));line.userData.bo=.8;p.extra.add(line);
-      const tip=new THREE.Mesh(new THREE.ConeGeometry(.08,.22,8),mat(color));tip.position.copy(to);tip.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction);p.extra.add(tip);
-    };
+    const arrow=(...args)=>routeArrow(p,...args);
     if(a){
       p.anchors[a.parent]=tile(p,-3.1,-3,3.5,.62,.25,C.word,{query:a.parent,name:context,caption:'Parent anchor: contextualized task-group marker.'});
       p.anchors[S.query]=tile(p,3.1,-3,3.5,.62,.4,c,{query:S.query,name:q.name,caption:'Contextualized label marker, before fusion.'});
@@ -164,7 +191,7 @@ export function createWalkthrough(canvas, options) {
     });return p;
   }
   function recordPlate(st,i,y){
-    const rec=DATA.stages.records[0];
+    const d=wordQuestion(DATA,S.query),rec=DATA.stages.records[d?.capture.task==='structuring'?d.capture.indices[0]:0];
     if(st.key==='slots'){
       const p=makePlate(st,i,y,14,9.4);rec.objectness.forEach((prob,id)=>{const x=(id%10-4.5)*1.22,z=(Math.floor(id/10)-4.5)*.8;tile(p,x,z,1,.4,.03+1.3*prob,id===S.slot?C.terra:mix(C.slate,C.paper,.2),{slot:id,name:'Record slot '+id,value:prob});flatText(p.labels,String(id),x,z+.32,.2,1,C.muted);if(prob>DATA.input.threshold)tag(p,prob.toFixed(2),x,TOP+1.3*prob+.35,z,C.terra,.24);});return p;
     }
@@ -190,6 +217,7 @@ export function createWalkthrough(canvas, options) {
     if(['fields','slots','membership','hierarchy'].includes(key))return recordPlate(st,i,y);
     if(key==='rnn')return lstmPlate(st,i,y);
     if(key==='anchors')return anchorPlate(st,i,y);
+    if(key==='scorer')return scorerPlate(st,i,y);
     if(key==='classification'){
       const groups=DATA.stages.classes,layouts=groups.map(g=>row(g.labels,l=>clamp(.6+.13*l.length,1.2,3),.5)),p=makePlate(st,i,y,Math.max(8,...layouts.map(l=>l.total))+2,1.9*groups.length+1.2,-.95*(groups.length-1));
       groups.forEach((g,k)=>g.labels.forEach((label,j)=>{const prob=g.probs[j],chosen=(DATA.result.classification?.[0]?.[k]||[]).some(p=>p.class_name===label),x=layouts[k].xs[j],z=.2-1.9*k,h=.05+1.5*prob;tile(p,x,z,layouts[k].ws[j],.6,h,chosen?C.cls:mix(C.cls,C.paper,.62),{name:g.group+': '+label,value:prob});flatText(p.labels,label,x,z+.65,.3,layouts[k].ws[j],C.cls);if(chosen)tag(p,`${g.group}: ${label} · ${prob.toFixed(2)}`,x,TOP+h+.35,z,C.cls);}));return p;
@@ -200,7 +228,7 @@ export function createWalkthrough(canvas, options) {
     const p=wordPlate(st,i,y,{questions:['input','words'].includes(key),wz:['pairs','relations','result'].includes(key)?.9:.55,wh:['entities','result','bio'].includes(key)?.06:.18,back:key==='bio'?1.3:['pairs','relations'].includes(key)?1.5:0});
     if(key==='entities'||key==='result')(DATA.result.ner?.[0]||[]).forEach(e=>paintEntity(p,e));
     if(key==='bio'){
-      const bio=DATA.stages.bio[0],q=Math.min(S.bioLabel,bio.labels.length-1);DATA.words.forEach((w,j)=>{const values=bio.probs[j][q];p.word[j].userData.target=.04+.8*values[2];p.word[j].material.color.set(mix(C.word2,C.olive,values[2]));tile(p,WL.xs[j],-.1,.23,.28,.03+1.3*values[0],C.terra,{word:j,name:w.text+' · start',value:values[0]});tile(p,WL.xs[j],-.65,.23,.28,.03+1.3*values[1],C.slate,{word:j,name:w.text+' · end',value:values[1]});});flatText(p.labels,'start',WL.xs[0]-1.2,-.1,.25,null,C.terra);flatText(p.labels,'end',WL.xs[0]-1.2,-.65,.25,null,C.slate);
+      const d=wordQuestion(DATA,S.query),bio=DATA.stages.bio[d?.capture.task==='ner'?d.capture.indices[0]:0],q=Math.min(S.bioLabel,bio.labels.length-1);DATA.words.forEach((w,j)=>{const values=bio.probs[j][q];p.word[j].userData.target=.04+.8*values[2];p.word[j].material.color.set(mix(C.word2,C.olive,values[2]));tile(p,WL.xs[j],-.1,.23,.28,.03+1.3*values[0],C.terra,{word:j,name:w.text+' · start',value:values[0]});tile(p,WL.xs[j],-.65,.23,.28,.03+1.3*values[1],C.slate,{word:j,name:w.text+' · end',value:values[1]});});flatText(p.labels,'start',WL.xs[0]-1.2,-.1,.25,null,C.terra);flatText(p.labels,'end',WL.xs[0]-1.2,-.65,.25,null,C.slate);flatText(p.labels,'inside = word height',0,1.8,.28,null,C.olive);flatText(p.labels,'Prepared question · '+bio.labels[q],0,-1.35,.38,14,labelColor(bio.labels[q]));
     }
     if(key==='words'){
       const sim=DATA.layers.at(-1).similarity[S.query];if(sim){const min=Math.min(...sim),max=Math.max(...sim);p.word.forEach((m,j)=>m.userData.target=.06+.62*(sim[j]-min)/(max-min||1));}
@@ -210,7 +238,7 @@ export function createWalkthrough(canvas, options) {
     }
     return p;
   }
-  const RAISED=new Set(['bio','entities','classification','pairs','relations','fields','slots','membership','hierarchy','result','rnn','anchors','embedding']);
+  const RAISED=new Set(['scorer','bio','entities','classification','pairs','relations','fields','slots','membership','hierarchy','result','rnn','anchors','embedding']);
   function buildTower(){
     sync();if(!DATA)return;dispose(tower);dispose(map);cache.forEach(v=>{v.tex.dispose();v.mat.dispose();});cache.clear();plates=[];
     WL=row(DATA.words,wordW,.34);let y=0;
@@ -231,9 +259,10 @@ export function createWalkthrough(canvas, options) {
   function aimSun(tgt,w){sun.target.position.copy(tgt);sun.position.copy(tgt).add(new THREE.Vector3(-8,22,12));const sc=sun.shadow.camera,r=w/2+3;sc.left=-r;sc.right=r;sc.top=r;sc.bottom=-r;sc.near=1;sc.far=180;sc.updateProjectionMatrix();}
   function focusStage(){sync();const p=plates[S.step];if(!p)return;let span=p.width+3,x=0;
     if(p.st.key==='anchors')span=Math.min(span,22);
+    if(p.st.key==='scorer'){span=20;x=DATA.words.length>12?WL.xs[S.word]:0;}
     if(p.st.key==='rnn'&&DATA.words.length>12){const left=Math.max(0,S.word-3),right=Math.min(DATA.words.length-1,S.word+3);x=WL.xs[S.word];span=Math.max(15,WL.xs[right]-WL.xs[left]+5);}
     if(p.tok.length){const xs=[p.tok[S.focus].position.x];if(p.st.key==='layer')topAttn(p.st.layer).filter(([,j])=>j!==S.focus).sort((a,b)=>b[0]-a[0]).slice(0,6).forEach(([,j])=>xs.push(p.tok[j].position.x));x=(Math.min(...xs)+Math.max(...xs))/2;span=Math.max(Math.max(...xs)-Math.min(...xs)+5,12);}
-    const raised=RAISED.has(p.st.key),dist=clamp(fitDistance(span,raised?7:Math.max(5,p.depth+1.5)),8,60),visW=2*dist*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.aspect,half=Math.max(0,p.width/2-visW/2+1.5),target=new THREE.Vector3(clamp(x,-half,half),p.y+(raised?.8:.3),.2+p.cz);
+    const raised=RAISED.has(p.st.key),dist=clamp(fitDistance(span,p.st.key==='scorer'?9.5:raised?7:Math.max(5,p.depth+1.5)),8,60),visW=2*dist*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.aspect,half=Math.max(0,p.width/2-visW/2+1.5),target=new THREE.Vector3(clamp(x,-half,half),p.y+(raised?.8:.3),.2+p.cz);
     fly(target.clone().addScaledVector(new THREE.Vector3(0,1,1).normalize(),dist),target);aimSun(target,Math.max(visW,p.width));
   }
   function towerCamera(){if(!plates.length)return;const h=plates.at(-1).y,w=Math.max(...plates.map(p=>p.width)),target=new THREE.Vector3(0,h/2,0),dist=clamp(fitDistance(w*1.05,h+8)*1.2,12,180);fly(target.clone().addScaledVector(new THREE.Vector3(.62,.32,1).normalize(),dist),target,1200);aimSun(target,Math.max(w,h));}

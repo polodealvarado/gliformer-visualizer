@@ -351,3 +351,20 @@ body.static .composer input[type=text] { background: var(--wash); color: var(--m
 .question-inputs > div:last-child b { color: var(--q); }
 .question-output { padding: 11px 12px; border-top: 1px solid var(--line); border-left: 3px solid var(--q); background: var(--paper); }
 .question-output b { color: var(--q); font-size: 14px; }
+
+.scorer-pair { border: 1px solid var(--line); border-radius: 10px; background: var(--wash); padding: 12px; display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 10px; align-items: center; margin: 12px 0; }
+.scorer-pair small, .scorer-pair b { display: block; overflow-wrap: anywhere; }
+.scorer-pair small { font-size: 11px; color: var(--muted); }
+.scorer-pair b { margin-top: 4px; }
+#panel-content .scorer-pair p { grid-column: 1 / -1; margin: 0; padding-top: 9px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.scorer-scores { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 12px 0; }
+.scorer-scores > div { border-top: 3px solid var(--terra); padding: 8px; background: var(--wash); border-radius: 5px; }
+.scorer-scores > div:nth-child(2) { border-color: var(--slate); }
+.scorer-scores > div:nth-child(3) { border-color: var(--olive); }
+.scorer-scores span, .scorer-scores b, .scorer-scores small { display: block; }
+.scorer-scores span { font-weight: 600; font-size: 12px; }
+.scorer-scores b { font: 500 19px var(--mono); margin: 6px 0; }
+.scorer-scores small { font-size: 10.5px; color: var(--muted); }
+.span-evidence { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--wash); margin: 12px 0; }
+.span-evidence > small { color: var(--muted); font-size: 12px; }
+#panel-content .span-evidence h3 { margin-top: 6px; }

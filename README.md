@@ -56,6 +56,8 @@ The LSTM stage introduces the idea with two readers and numerical notepads, a co
 
 The anchors stage builds a question from its task context and requested label. Selecting a label updates the diagram and its three real vector strips: parent context, label and fused question. Relation labels and later record slots retain their distinct routes. [Preview the explanation](docs/anchors.png).
 
+“Question → word scores” connects that prepared question to the source. Select a word to inspect the two actual input vectors and its three output scores. Follow the same label into all-word start/end/inside evidence, then inspect a returned entity alongside its boundary evidence. [Preview the comparison](docs/scorer.png).
+
 Each stage has its own diagram. Entity decisions label complete source spans; BIO shows start/end/inside scores at words; relations draw directed candidate links; records use fixed slots and span-membership connections. Previous stages remain faintly visible for context, following the original visualizer. The meaning map includes trails and the full-space nearest-word link.
 
 <table>
@@ -181,6 +183,7 @@ uv run python scripts/verify_traces.py    # numeric/source invariants across all
 uv run python scripts/reference_qa.py     # every visual stage and the original layout conventions
 uv run python scripts/lstm_qa.py          # beginner LSTM copy, replay and word inspection
 uv run python scripts/anchors_qa.py       # selected questions, exact tensor rows and nested field labels
+uv run python scripts/scorer_qa.py        # question → word pair → BIO scores → decoded span
 ```
 
 The browser check covers every task, all explanation tabs, real attention-head selection, the meaning map, document-box selection, geometry enabled/disabled, a custom sentence, mobile overflow and JavaScript errors. The model check performs real inference for all task tabs. Baking also exercises every preset, including the nested company schema.

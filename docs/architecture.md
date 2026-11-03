@@ -138,6 +138,19 @@ Source: [`AnchoredSpanExtractionHead`](https://github.com/Knowledgator/GLiFormer
 `AnchoredSpanScorer` projects question and source-word vectors, combines them in an MLP and produces three logits per word and entity type:
 
 ```text
+[w1, w2] = Linear_word(word)       # 1024 → 2048, split into two 1024-vectors
+[q1, q2] = Linear_label(question)  # 1024 → 2048, split into two 1024-vectors
+features = concat(w1, q1, w2 * q2) # elementwise interaction; 3072 dimensions
+logits = Linear_3(ReLU(Linear_4096(features)))
+```
+
+The word input is the post-LSTM feature; the question input is the fused parent/label representation from the preceding stage. The scorer evaluates every word–label pair in parallel. It is not the cosine similarity displayed in the meaning map. The evaluation path disables the MLP's dropout.
+
+The “Question → word scores” teaching stage isolates one selected pair. Its input strips use captured question and word vectors; its output uses the captured entity or field BIO probabilities. Its network block and arrows are schematic: intermediate projections, products and MLP activations are not captured. Selection retains the exact label and group when moving from question preparation to scoring, sequence scores and final spans. Classification and relation labels retain their separate scoring routes.
+
+The final entity explanation shows a returned mention alongside its actual per-word start/end/inside evidence. It does not rerun decoding or compute a replacement confidence from rounded display scores.
+
+```text
 ner_logits: [groups,W,entity types,3]
 last axis:  start, end, inside
 ```
@@ -148,7 +161,7 @@ A greedy search resolves overlaps. The app uses `flat_ner=True`. Internal word e
 
 There is no GLiNER2.5 gap encoder, shared boundary candidate pool, null-abstention head or record anchor-span decoder in this checkpoint.
 
-Source: [`NERHead`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/ner/model.py), [`SpanDecoder`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/span_decoder.py).
+Source: [`AnchoredSpanScorer`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/layers/anchored_scorer.py), [`NERHead`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/ner/model.py), [`SpanDecoder`](https://github.com/Knowledgator/GLiFormer/blob/73d1dad5ebf1f34a00339f023b1fd77a6d1f386a/gliformer/tasks/span_decoder.py).
 
 ## 8. Whole-text classification
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {createWalkthrough} from './walkthrough.js';
-import {TASKS, LESSONS, describeQuestion} from './lessons.js';
+import {TASKS, LESSONS, describeQuestion, wordQuestion} from './lessons.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -75,6 +75,7 @@ function buildSteps() {
   for(let layer=1;layer<=INFO.layers;layer++)STEPS.push({key:'layer',layer,...LESSONS.layer,title:`Layer ${layer} of ${INFO.layers}`});
   if(S.task!=='embedding')STEPS.push(...['words','rnn'].filter(k=>k!=='rnn'||DATA.rnn).map(key=>({key,...LESSONS[key]})));
   const available=key=>!(['bio','entities'].includes(key)&&!DATA.stages.bio?.length)
+    && !(key==='scorer'&&!wordQuestion(DATA,S.query))
     && !(key==='classification'&&!DATA.stages.classes?.length)
     && !(['fields','slots','membership','hierarchy'].includes(key)&&!DATA.stages.records?.length);
   STEPS.push(...TASKS[S.task].heads.filter(available).map(key=>({key,...LESSONS[key]})));
@@ -138,7 +139,7 @@ async function runAnalysis() {
       out=await fetchJSON('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(requestBody())});
     }
     if(current!==serial)return;
-    DATA=out;buildSteps();S.step=Math.max(0,STEPS.findIndex(s=>s.key===previousStage.key&&(s.key!=='layer'||s.layer===previousStage.layer)));S.query=Math.max(0,DATA.queries.findIndex(q=>q.kind!=='schema'));S.focus=DATA.queries[S.query]?.token||0;S.head=-1;S.slot=DATA.stages.records?.[0]?.slot_order?.[0]||0;S.bioLabel=0;
+    DATA=out;S.word=clamp(S.word,0,DATA.words.length-1);buildSteps();S.step=Math.max(0,STEPS.findIndex(s=>s.key===previousStage.key&&(s.key!=='layer'||s.layer===previousStage.layer)));S.query=Math.max(0,DATA.queries.findIndex(q=>q.kind!=='schema'));S.focus=DATA.queries[S.query]?.token||0;S.head=-1;S.slot=DATA.stages.records?.[0]?.slot_order?.[0]||0;S.bioLabel=0;
     if(S.task==='document')documentData=DATA.document;
     buildTower();buildMap();renderRail();renderPanel();renderDocument();updateView();
     $('#timing').textContent=`${nf(DATA.tokens.length)} tokens · ${DATA.ms} ms inference · ${DATA.total_ms} ms trace`;$('#mode').textContent=INFO.name+' · '+DATA.ms+' ms'+(STATIC?' (precomputed)':' · '+INFO.device);
@@ -154,12 +155,12 @@ function startExploring() {
 
 function selectedStage(){return STEPS[S.step]||{key:'input',...LESSONS.input};}
 function layerIndex(){const st=selectedStage();return st.key==='layer'?st.layer:st.key==='embed'?0:INFO.layers;}
-function selectedBio(){return DATA.stages.bio?.[0];}
-function selectedRecord(){return DATA.stages.records?.[0];}
+function selectedBio(){const a=DATA.stages.anchors?.questions?.find(a=>a.query===S.query&&a.task==='ner');return DATA.stages.bio?.[a?.indices[0]||0];}
+function selectedRecord(){const a=DATA.stages.anchors?.questions?.find(a=>a.query===S.query&&a.task==='structuring');return DATA.stages.records?.[a?.indices[0]||0];}
 function wordAttention(layer){return DATA.queries[S.query]?.token===S.focus?(S.head<0?layer.query_attention?.[S.query]:layer.heads?.[S.head]?.[S.query]):DATA.words.map((_,wi)=>DATA.tokens.reduce((total,t,ti)=>total+(t.word===wi?(layer.attention[S.focus]?.[ti]||0):0),0));}
-function queryControl() {
+function queryControl(kinds=null) {
   if(!DATA.queries.length)return '';
-  return `<label class="sub-label" for="query-select">Follow a schema question</label><select class="query-selector" id="query-select">${DATA.queries.map((q,i)=>`<option value="${i}" ${i===S.query?'selected':''}>${esc(q.kind+' · '+q.name)}</option>`).join('')}</select>`;
+  return `<label class="sub-label" for="query-select">Follow a schema question</label><select class="query-selector" id="query-select">${DATA.queries.map((q,i)=>kinds&&!kinds.includes(q.kind)?'':`<option value="${i}" ${i===S.query?'selected':''}>${esc(q.kind+' · '+q.name)}</option>`).join('')}</select>`;
 }
 function wordControl(){return `<label class="sub-label" for="word-select">Inspect a source word</label><select class="query-selector" id="word-select">${DATA.words.map((w,i)=>`<option value="${i}" ${i===S.word?'selected':''}>${i} · ${esc(w.text)}</option>`).join('')}</select>`;}
 function anchorQuestionContent(numbers=false){
@@ -174,7 +175,21 @@ function anchorQuestionContent(numbers=false){
   }else if(q.kind==='schema'){
     html+=`<h3>Task heading · ${esc(q.name)}</h3><p>This marker supplies the shared context for the labels in its group. Choose one of those labels to see how the two are combined.</p>${numbers?strip(DATA.layers.at(-1).strip[q.token]):''}`;
   }else html+=empty('No captured fusion is available for this marker.');
+  if(a)html+=`<div class="mini-nav"><button data-jump="${q.kind==='class'?'classification':'scorer'}">${q.kind==='class'?'Use this question to classify the text':'Use this question on the words'} →</button></div>`;
   return html;
+}
+function scorerContent(numbers=false){
+  const d=wordQuestion(DATA,S.query);if(!d)return empty('No captured word-scoring route in this run.');
+  const word=DATA.words[S.word],values=d.probabilities[S.word];
+  return `${queryControl(['entity','field'])}${wordControl()}<div class="scorer-pair" data-question="${d.index}" data-word="${S.word}"><div><small>Prepared question · from the previous stage</small><b>${esc(d.q.name)}</b></div><span>+</span><div><small>Contextualized word · from the LSTM</small><b>${esc(word.text)}</b></div><p>↓ Learned comparison network + sigmoid</p></div><div class="scorer-scores">${['Start','End','Inside'].map((name,i)=>`<div><span>${name}</span><b data-score="${i}">${fmt(values[i])}</b><small>${['Could it begin here?','Could it finish here?','Does this word belong?'][i]}</small></div>`).join('')}</div><p>These are the actual scores for <b>“${esc(word.text)}”</b> as <b>“${esc(d.q.name)}”</b>. Select another word to reuse the same question; select another label to ask a different question.</p>${numbers?`<h3>Question vector · after task + label fusion</h3>${strip(d.capture.fused)}<h3>Word vector · after the LSTM</h3>${strip(DATA.word_vectors[S.word])}${note('The diagram’s comparison block is schematic. Intermediate projections are not saved; the inputs and the three output scores above come from this run.')}`:''}<div class="mini-nav"><button data-jump="anchors">← Prepared question</button><button data-jump="${d.destination}">See scores across the text →</button></div>`;
+}
+function entityEvidenceContent(){
+  const q=DATA.queries[S.query],bio=selectedBio();
+  const entity=(DATA.result.ner?.[0]||[]).find(e=>e.label===q?.name);
+  if(!entity||!bio)return `<p>No final mention of <b>${esc(q?.name||'the selected type')}</b> was returned for this run. Inspect the word scores to see the available evidence.</p>`;
+  const label=bio.labels.indexOf(entity.label),ids=DATA.words.flatMap((w,i)=>w.start>=entity.start&&w.end<=entity.end?[i]:[]);
+  if(label<0||!ids.length)return '';
+  return `<div class="span-evidence"><small>From word scores to a returned mention · ${esc(entity.label)}</small><h3>${esc(entity.text)}</h3>${matrix(ids.map(i=>DATA.words[i].text),['start','end','inside'],ids.map(i=>bio.probs[i][label]))}<p>Start at <b>${esc(DATA.words[ids[0]].text)}</b>, end at <b>${esc(DATA.words[ids.at(-1)].text)}</b>, with inside evidence across the whole mention.</p><p>Threshold: ${fmt(DATA.input.threshold,2)} · returned span score: <b>${fmt(entity.score,5)}</b>.</p><p class="help">The decoder also uses inside evidence immediately outside the span to rank its boundaries, then resolves overlaps. The score above is the actual decoder result.</p></div><div class="mini-nav"><button data-jump="bio">← Inspect all word scores</button></div>`;
 }
 function lstmWordContent(){
   const word=DATA.words[S.word],before=DATA.words.slice(0,S.word),after=DATA.words.slice(S.word+1);
@@ -226,6 +241,7 @@ function dataContent(key) {
     case 'words':return `${wordControl()}<p>The selected word starts at subword token <b>${tokenForWord(S.word)}</b>.</p><h3>After the Transformer</h3>${strip(DATA.layers.at(-1).strip[tokenForWord(S.word)])}`;
     case 'rnn':return lstmWordContent();
     case 'anchors':return anchorQuestionContent(true);
+    case 'scorer':return scorerContent(true);
     case 'bio': {
       const bio=selectedBio();if(!bio)return empty('This run has no standalone entity BIO scores.');
       const i=clamp(S.bioLabel,0,bio.labels.length-1);
@@ -277,12 +293,13 @@ function renderPanel() {
     $('#stage-number').textContent='Alternative view';$('#stage-title').textContent='Meaning map';$('#stage-subtitle').textContent='Where the model places each piece, layer by layer.';html=meaningContent();
   } else if(S.overview) {
     html=`<p>This is <b>GLiFormer Large v1</b> by Knowledgator. Follow your input through its shared encoder, then into the ${esc(TASKS[S.task].title.toLowerCase())} head.</p><p>Pick a plate in the tower or a stage in the list. Use the three tabs to move from the plain-language idea to the real values and the source code.</p>${stats([[INFO.layers,'Transformer layers'],[nf(INFO.hidden),'dimensions'],[(INFO.params/1e6).toFixed(1)+'M','parameters']])}<div class="mini-nav"><button data-jump="input">Start at the input →</button><button data-jump="result">See the answers →</button></div>${note(DATA.document?'This run follows a page through text extraction and 2D layout. Click Document to see the boxes.':'Every attention weight, vector strip and task score comes from this sentence’s real forward pass.')}<h3>This run</h3><p class="sentence">${esc(DATA.input.text)}</p>`;
-  } else if(S.tab==='what')html=(st.key==='anchors'?anchorQuestionContent():'')+st.what;
+  } else if(S.tab==='what')html=(st.key==='anchors'?anchorQuestionContent():st.key==='scorer'?scorerContent():st.key==='entities'?entityEvidenceContent():'')+st.what;
   else if(S.tab==='data')html=dataContent(st.key);
   else html=st.tech+`<dl class="tech"><dt>Checkpoint</dt><dd>${esc(INFO.name)}@${INFO.revision?.slice(0,8)||'local'}</dd><dt>Framework</dt><dd>GLiFormer ${esc(INFO.versions.gliformer)}</dd><dt>Device</dt><dd>${esc(INFO.device)}</dd></dl><p><a href="${INFO.sources[st.source]||INFO.sources.encoder}" target="_blank" rel="noopener">Read the exact source revision ↗</a></p>`;
   $('#panel-content').innerHTML=html;
   $('#step-count').innerHTML=S.overview?'<b>Full view</b> · press ▶ to start':`Step ${S.step+1} of ${STEPS.length} · <b>${esc(st.title)}</b>`;
-  $('#follow').innerHTML='<span>Following:</span>'+DATA.queries.map((q,i)=>q.kind==='schema'?'':`<button type="button" class="lab ${i===S.query?'on':''}" style="--c:${queryColor(q)}" data-query="${i}">${esc(q.name)}</button>`).join('');
+  const kinds=!S.overview&&S.view==='tower'?(st.key==='scorer'?['entity','field']:['bio','entities'].includes(st.key)?['entity']:null):null;
+  $('#follow').innerHTML='<span>Following:</span>'+DATA.queries.map((q,i)=>q.kind==='schema'||kinds&&!kinds.includes(q.kind)?'':`<button type="button" class="lab ${i===S.query?'on':''}" style="--c:${queryColor(q)}" data-query="${i}">${esc(q.name)}</button>`).join('');
   $('#prev').disabled=S.step===0;$('#next').disabled=S.step===STEPS.length-1;
 }
 
@@ -299,6 +316,7 @@ function initScene(){
       if(item.word!==undefined){S.word=item.word;S.focus=tokenForWord(S.word);}
       if(item.slot!==undefined)S.slot=item.slot;
       S.tab='data';renderPanel();refreshFocus();updateMap();renderDocument();
+      if(item.word!==undefined&&selectedStage().key==='scorer'&&S.view==='tower')focusStage();
     },tooltip:(item,event)=>{
       if(!item){$('#tooltip').hidden=true;return;}
       $('#tooltip').innerHTML=`<b>${esc(item.name||'')}</b>${item.caption?'<span>'+esc(item.caption)+'</span>':''}${item.value!==undefined?'<span>'+fmt(item.value)+'</span>':''}`;
@@ -311,16 +329,24 @@ function introCamera(){engine?.setView();resize();engine?.introCamera();}
 function updateMap(immediate=false){engine?.updateMap(immediate);$('#map-layer').value=S.layer;$('#map-value').textContent=S.layer===0?'embeddings':S.layer+' / '+INFO.layers;}
 function followQuery(index){
   S.query=index;S.focus=DATA.queries[index].token;const label=selectedBio()?.labels.indexOf(DATA.queries[index].name);if(label>=0)S.bioLabel=label;
+  const field=DATA.stages.anchors?.questions?.find(a=>a.query===index&&a.task==='structuring');if(field)S.bioLabel=field.indices[2];
   renderPanel();refreshFocus();updateMap();if(S.view==='document')updateView();else if(!S.overview&&S.view==='tower')focusStage();
 }
 function selectStep(index){
   if(!DATA)return;const previous=S.overview?null:S.step;S.step=clamp(index,0,STEPS.length-1);S.overview=false;
   const st=selectedStage();if(st.key==='layer')S.layer=st.layer;else if(st.key==='embed')S.layer=0;
+  if(st.key==='scorer'||['bio','entities'].includes(st.key)){
+    const d=st.key==='scorer'?wordQuestion(DATA,S.query):null;
+    const index=d?.index??(DATA.queries[S.query]?.kind==='entity'?S.query:DATA.queries.findIndex(q=>q.kind==='entity'));
+    if(index>=0){S.query=index;S.focus=DATA.queries[index].token;S.bioLabel=d?.capture.indices[2]??Math.max(0,selectedBio()?.labels.indexOf(DATA.queries[index].name)||0);}
+  }
   renderRail();renderPanel();updateView();refreshFocus();$('#scene-hint').style.opacity='0';
   if(S.view==='tower'){focusStage();if(previous!==null&&S.step===previous+1)engine?.transition(previous,S.step);}if(S.view==='map')updateMap();
 }
 function setView(view){
-  if(view==='document'&&!DATA?.document)return;S.view=view;stop();updateView();
+  if(view==='document'&&!DATA?.document)return;S.view=view;stop();
+  if(view==='tower'&&!S.overview&&['scorer','bio','entities'].includes(selectedStage().key)){selectStep(S.step);return;}
+  updateView();
   if(view==='map'){updateMap(true);fly(new THREE.Vector3(3,6,21),new THREE.Vector3());}
   else if(view==='tower'){S.overview?towerCamera():focusStage();}
 }
@@ -378,9 +404,13 @@ document.addEventListener('change',event=>{
   const el=event.target;
   if(el.id==='query-select')followQuery(Number(el.value));
   if(el.id==='head-select'){S.head=Number(el.value);renderPanel();refreshFocus();if(S.view==='document')renderDocument();}
-  if(el.id==='word-select'){S.word=Number(el.value);S.focus=tokenForWord(S.word);renderPanel();refreshFocus();renderDocument();if(selectedStage().key==='rnn'&&S.view==='tower')focusStage();}
+  if(el.id==='word-select'){S.word=Number(el.value);S.focus=tokenForWord(S.word);renderPanel();refreshFocus();renderDocument();if(['rnn','scorer'].includes(selectedStage().key)&&S.view==='tower')focusStage();}
   if(el.id==='slot-select'){S.slot=Number(el.value);renderPanel();refreshFocus();}
-  if(el.id==='bio-select'){S.bioLabel=Number(el.value);renderPanel();refreshFocus();}
+  if(el.id==='bio-select'){
+    S.bioLabel=Number(el.value);const isField=selectedStage().key==='fields',group=isField?selectedRecord():selectedBio(),name=isField?group?.fields[S.bioLabel]:group?.labels[S.bioLabel];
+    const capture=DATA.stages.anchors?.questions?.find(a=>a.task===(isField?'structuring':'ner')&&a.label===name&&a.group===(isField?group?.name:group?.group));
+    if(capture)followQuery(capture.query);else{renderPanel();refreshFocus();}
+  }
   if(el.id==='upload'){uploadedFile=el.files[0];uploadDocument();}
   if(el.id==='document-page')uploadDocument(Number(el.value));
   if(el.id==='trails')engine?.setTrails(el.checked);
